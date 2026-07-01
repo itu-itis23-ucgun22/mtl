@@ -1,0 +1,10 @@
+# Colab already ships a CUDA-enabled torch/torchvision build matched to the
+# runtime's CUDA version. Do NOT `pip install -r` this file blindly.
+# In the notebook's first cell, check first:
+#   import torch; print(torch.__version__, torch.cuda.is_available())
+# Only reinstall if torch is missing or CUDA is not available:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pycocotools==2.0.7
+PyYAML>=6.0
+tqdm>=4.66
+requests>=2.31
