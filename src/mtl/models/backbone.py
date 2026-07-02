@@ -14,7 +14,7 @@ from torchvision.ops import misc as misc_nn_ops
 def build_backbone(
     name: str = "resnet50",
     pretrained: bool = True,
-    trainable_layers: int = 3,
+    trainable_layers: int = 0,
 ) -> BackboneWithFPN:
     """Build a ResNet+FPN backbone.
 
@@ -24,14 +24,15 @@ def build_backbone(
 
     trainable_layers=3 freezes the stem + layer1 and trains layer2-4, a
     reasonable default for fine-tuning ImageNet features on ~20k images
-    without catastrophic forgetting.
+    without catastrophic forgetting. trainable_layers=0 freezes all layers, and trainable_layers=5 trains all layers (including the stem). See
+    torchvision's `resnet_fpn_backbone` for details.
     """
     if name != "resnet50":
         raise NotImplementedError(f"Only resnet50 is wired up for now, got '{name}'")
 
     weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
     return resnet_fpn_backbone(
-        backbone_name=name,
+        backbone_name=name, 
         weights=weights,
         norm_layer=misc_nn_ops.FrozenBatchNorm2d,
         trainable_layers=trainable_layers,

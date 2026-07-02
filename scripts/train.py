@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 from mtl.config import apply_smoke_overrides, config_to_dict, load_config
 from mtl.datasets.coco_multitask import CocoMultiTaskDataset
 from mtl.datasets.collate import collate_fn
-from mtl.engine.checkpoint import save_checkpoint
+from mtl.engine.checkpoint import load_checkpoint, save_checkpoint
 from mtl.engine.train_one_epoch import train_one_epoch
 from mtl.models.multitask_model import MultiTaskModel
 from mtl.utils.device import resolve_device
@@ -36,6 +36,7 @@ def main() -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--overrides", nargs="*", default=[], help="section.field=value pairs")
     parser.add_argument("--smoke", action="store_true", help="force a tiny, fast, CPU-safe run")
+    parser.add_argument("--resume", help="path to a checkpoint to warm-start model+optimizer weights from")
     args = parser.parse_args()
 
     cfg = load_config(args.config, parse_overrides(args.overrides))
@@ -72,6 +73,15 @@ def main() -> None:
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
     logger = CsvLogger(out_dir="runs", run_name=cfg.train.run_name)
 
+    if args.resume:
+        # Warm-starts weights from a checkpoint (saved either mid-epoch via
+        # checkpoint_every_steps, or at a previous epoch's end). This
+        # re-iterates the dataloader from the start rather than resuming an
+        # exact dataloader position - simpler, and fine for interruption
+        # recovery since the model/optimizer state is what actually matters.
+        load_checkpoint(model, optimizer, args.resume, map_location=str(device))
+        print(f"Resumed weights from {args.resume}")
+
     print("Config:", config_to_dict(cfg))
 
     step = 0
@@ -92,6 +102,9 @@ def main() -> None:
             log_every=cfg.train.log_every,
             amp=cfg.train.amp,
             start_step=step,
+            checkpoint_every_steps=cfg.train.checkpoint_every_steps,
+            checkpoint_dir=cfg.train.checkpoint_dir,
+            run_name=cfg.train.run_name,
         )
         save_checkpoint(
             model, optimizer, epoch, f"{cfg.train.checkpoint_dir}/{cfg.train.run_name}_epoch{epoch}.pt"

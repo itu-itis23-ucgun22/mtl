@@ -22,7 +22,7 @@ def evaluate(model: nn.Module, dataset: CocoMultiTaskDataset, dataloader: DataLo
     coco_detections = []
     intersection = np.zeros(dataset.num_classes + 1, dtype=np.int64)
     union = np.zeros(dataset.num_classes + 1, dtype=np.int64)
-    all_cls_pred, all_cls_true = [], []
+    all_cls_pred, all_cls_true = [], [] # listelere şu yüzden ihtiyacımız var: eğitim yaparken batchler halinde çalışıyoruz ve her batchin çıktısını tek tek alıp birleştirmemiz gerekiyor. Bu yüzden listelere atıyoruz ve en sonunda np.stack ile birleştiriyoruz.
 
     for images, targets in dataloader:
         images = images.to(device)

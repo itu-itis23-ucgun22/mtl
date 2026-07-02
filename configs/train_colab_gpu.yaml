@@ -31,3 +31,4 @@ train:
   log_every: 20
   checkpoint_dir: checkpoints
   run_name: colab_gpu
+  checkpoint_every_steps: 500

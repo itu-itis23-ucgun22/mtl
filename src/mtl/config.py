@@ -53,6 +53,7 @@ class TrainConfig:
     log_every: int = 10
     checkpoint_dir: str = "checkpoints"
     run_name: str = "run"
+    checkpoint_every_steps: Optional[int] = None  # mid-epoch checkpoint cadence; None = only at epoch end
 
 
 @dataclass

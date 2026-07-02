@@ -83,6 +83,24 @@ Open `notebooks/colab_train.ipynb` — it installs dependencies, pulls the
 repo, builds the COCO subset, and runs
 `python scripts/train.py --config configs/train_colab_gpu.yaml`.
 
+A full run is thousands of steps and can take hours - longer than a single
+Colab session may allow, and interruptions (manual stop, disconnect) are
+common. `configs/train_colab_gpu.yaml` sets `train.checkpoint_every_steps:
+500`, so a checkpoint (`checkpoints/colab_gpu_step<N>.pt`) is saved every
+500 steps, not just at epoch end. If a run gets interrupted, resume from
+the latest one:
+
+```
+python scripts/train.py --config configs/train_colab_gpu.yaml --resume checkpoints/colab_gpu_step3500.pt
+```
+
+This warm-starts the model/optimizer weights (not the exact dataloader
+position - training re-iterates the dataset from the start of an epoch,
+which is the standard, simple approach to interruption recovery). If
+you're running long jobs, mount Google Drive and point `checkpoint_dir` at
+it (`--overrides train.checkpoint_dir=/content/drive/MyDrive/mtl_checkpoints`)
+so checkpoints survive a runtime reset, not just a script interrupt.
+
 ## Project layout
 
 ```
