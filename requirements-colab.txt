@@ -5,6 +5,7 @@
 # Only reinstall if torch is missing or CUDA is not available:
 #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 pycocotools==2.0.7
+timm>=0.9.12  # DINO ViT-B/16 omurgası; pip install timm (torch/torchvision'a dokunmaz)
 PyYAML>=6.0
 tqdm>=4.66
 requests>=2.31

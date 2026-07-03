@@ -19,11 +19,16 @@ normalization, while still reusing RetinaNet's head/anchors/loss verbatim.
 """
 from __future__ import annotations
 
+from torch import nn
 from torchvision.models.detection import RetinaNet
-from torchvision.models.detection.backbone_utils import BackboneWithFPN
 
 
-def build_detection_model(backbone: BackboneWithFPN, num_classes: int) -> RetinaNet:
+def build_detection_model(backbone: nn.Module, num_classes: int) -> RetinaNet:
     """num_classes = number of foreground COCO categories (80); RetinaNet's
-    per-class sigmoid classification needs no separate background class."""
+    per-class sigmoid classification needs no separate background class.
+
+    RetinaNet yalnızca `backbone.out_channels` + 5-seviyeli feature dict döndüren
+    bir forward bekler; illa `BackboneWithFPN` olması gerekmez. Bu sayede ResNet+FPN
+    veya DINO+SimpleFeaturePyramid (models/dino_backbone.py) aynı şekilde takılabilir.
+    """
     return RetinaNet(backbone, num_classes=num_classes)

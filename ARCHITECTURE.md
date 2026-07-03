@@ -33,6 +33,23 @@ Bir görüntüyü **bir kere** ResNet50+FPN'den geçiriyoruz, çıkan feature pi
                         total.backward() + optimizer.step()
 ```
 
+**Omurga takılabilir (gövde + neck).** Yukarıdaki "ResNet50 + FPN" kutusu aslında iki parça:
+**gövde** (feature çıkaran omurga) + **neck** (gövde feature'larını head'lerin beklediği ortak
+formata çeviren ara katman). FPN, ResNet'e özgü değil — sadece bir neck; torchvision
+`resnet_fpn_backbone` ikisini tek pakette birleştirdiği için "backbone"un içinde görünür.
+Head'ler yalnızca neck'in **çıktı sözleşmesini** tüketir: `{"0","1","2","3","pool"}` (strides
+4/8/16/32/64, 256 kanal). `build_backbone(name, ...)` (`models/backbone.py`) iki seçenek verir:
+
+| `backbone_name` | gövde | neck |
+|---|---|---|
+| `resnet50` | ResNet50 | FPN |
+| `dino_vitb16` | DINOv1 ViT-B/16 | Simple Feature Pyramid (`models/dino_backbone.py`) |
+
+DINO (self-supervised ViT) *plain* bir transformer, tek çözünürlük (stride 16) üretir; FPN'in
+birleştireceği doğal hiyerarşi olmadığından FPN yerine ViTDet'in Simple Feature Pyramid'i tek
+haritadan 5 seviyeyi türetir. İkisi de aynı sözleşmeyi ürettiği için üç head + RetinaNet
+değişmeden çalışır. Gerekçeler: [EXPERIMENTS.md](EXPERIMENTS.md) "Kararlar" notu.
+
 **Neden RetinaNet, neden Mask R-CNN değil:** `MaskRCNN`, RPN+RoIAlign+kutu/mask head'lerini kendi `forward`'ının içine gömüyor — 4. bir görevi (classification) oraya eklemek internal koda müdahale gerektirirdi. `RetinaNet` ise `backbone → feature dict → head` sınırını temiz bırakıyor, üç kafa da aynı dict'i okuyor. Bu yüzden segmentation şu an **semantic** (piksel başına tek sınıf haritası), COCO'daki gibi **instance** segmentation değil — bilinçli bir v1 kararı (`models/maskrcnn_v2.py`'de v2 yol haritası yazılı).
 
 ---
@@ -52,7 +69,8 @@ MTL/
 ├── src/mtl/                   # ← asıl kütüphane, her şey buradan import ediliyor
 │   ├── config.py               # tüm ayarların Python karşılığı (aşağıda detaylı)
 │   ├── models/                 # "NE öğreniliyor": backbone + 3 head + birleştirici
-│   │   ├── backbone.py           # ResNet50+FPN kurar (torchvision sarmalayıcı)
+│   │   ├── backbone.py           # build_backbone: gövde+neck kurar (resnet50→FPN | dino_vitb16→SFP)
+│   │   ├── dino_backbone.py      # DINOv1 ViT-B/16 + Simple Feature Pyramid (ResNet+FPN ile aynı arayüz)
 │   │   ├── detection_head.py     # RetinaNet kurar
 │   │   ├── segmentation_head.py  # FCN tabanlı piksel-sınıflandırma head'i
 │   │   ├── classification_head.py# GAP+FC çok-etiketli sınıflandırma head'i
