@@ -179,18 +179,16 @@ ResNet-vs-DINO markdown tablosu üretir (aşağıya kopyalanır).
 
 ## Karşılaştırma — ResNet vs DINO
 
-Kaynak: `runs/results.csv` (her eval bir satır ekler). Aşağıdaki tablo koşular yapıldıkça
-`python scripts/compare_results.py` çıktısıyla güncellenecek. ResNet sütunu şimdilik Deneme 3
-(1 epoch, 2813 adım) sayıları; DINO sütunu ilk koşudan sonra doldurulacak.
+**Tüm karşılaştırma sonuçları tek dosyada:** [RESULTS.md](RESULTS.md). Buradaki dağınık
+tabloları oraya taşıdık (tek kaynak, birbirinden sapmasın). Ham makine logu `runs/results.csv`.
 
-| metric | resnet50 | dino_vitb16 |
-|---|---|---|
-| detection_mAP | 0.0517 | _(koşu bekleniyor)_ |
-| seg_mIoU | 0.1218 | _(koşu bekleniyor)_ |
-| cls_mAP | 0.429 | _(koşu bekleniyor)_ |
-| cls_F1 | 0.409 | _(koşu bekleniyor)_ |
+### ⚠️ Düzeltme — donuk (layers=0) ResNet hiç koşulmadı
+Yukarıdaki **Deneme 2**, `trainable_backbone_layers=0` (donuk backbone) diye kayıtlı ama
+o koşunun config'i doğrulanmadı (Deneme 3 notundaki flip-flop uyarısına bakınız). Kullanıcı
+teyidi: **ResNet hiçbir zaman layers=0 ile çalıştırılmadı** — yani güvenilir bir donuk-ResNet
+sonucu yok. Şu ana kadarki ResNet koşularının hepsi **layers=3** (kısmen eğitilebilir):
+step 200 (Deneme 1), 2813 (Deneme 3), 4500. DINO ise **layers=0** (donuk).
 
-> Not: adil karşılaştırma için iki omurga da aynı adım bütçesi + aynı donuk-backbone
-> ayarıyla kıyaslanmalı (ResNet Deneme 2 donuk / DINO `trainable_backbone_layers=0`).
-> Deneme 3'ün ResNet'i kısmen eğitilebilir (`layers=3`) olduğundan, DINO ile birebir adil
-> kıyas için ResNet'in donuk bir koşusu da `results.csv`'ye eklenmeli.
+Sonuç: mevcut kıyasta backbone farkının yanında **protokol farkı** da var (kısmen-eğitilebilir
+ResNet vs donuk DINO). Birebir adil kıyas için eksik koşu — donuk ResNet — yapılmalı:
+`--overrides model.trainable_backbone_layers=0`. Detay ve boş tablo hücreleri [RESULTS.md](RESULTS.md)'de.
