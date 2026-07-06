@@ -59,6 +59,8 @@ def main() -> None:
         shuffle=True,
         num_workers=cfg.data.num_workers,
         collate_fn=collate_fn,
+        pin_memory=True,  # CPU->GPU kopyayı hızlandırır (GPU'yu veri beklerken boşta bırakmamak için)
+        persistent_workers=cfg.data.num_workers > 0,  # her epoch başında worker'ları yeniden kurma
     )
 
     model = MultiTaskModel(

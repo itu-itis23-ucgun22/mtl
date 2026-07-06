@@ -59,6 +59,8 @@ def main() -> None:
     dataloader = DataLoader(
         dataset, batch_size=cfg.train.batch_size, shuffle=False,
         num_workers=cfg.data.num_workers, collate_fn=collate_fn,
+        pin_memory=True,  # CPU->GPU kopyayı hızlandırır
+        persistent_workers=cfg.data.num_workers > 0,
     )
 
     model = MultiTaskModel(
