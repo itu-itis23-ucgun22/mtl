@@ -138,6 +138,42 @@ etmeye karar verildi. `checkpoint_every_steps=500` + `scripts/train.py
 
 ---
 
+## Deneme 4 — 2026-07-04 — Donuk (layers=0) ResNet, 1 epoch — eksik adil-kıyas koşusu
+
+### Kurulum
+- `--overrides model.trainable_backbone_layers=0 train.max_steps=2813` — ResNet50 gövdesi
+  **tamamen donuk**, sadece FPN + üç head eğitiliyor. Tam 1 epoch (2813 adım).
+- Amaç: DINO'nun tüm koşuları `layers=0` (donuk), ResNet'inkiler ise `layers=3` (kısmen
+  eğitilebilir) olduğu için kıyasta bir **protokol farkı** vardı (bkz. aşağıdaki düzeltme).
+  Bu koşu o eksiği kapatıyor — artık "donuk ResNet vs donuk DINO", aynı adımda birebir.
+- Diğer ayarlar Deneme 1–3 ile aynı: `batch_size=8, img_size=512, lr=0.0001, amp=true`,
+  gerçek ~22.500 görüntülük COCO subset. Checkpoint: `colab_gpu_epoch0.pt`.
+
+### Sonuç (donuk ResNet, 2813 adım)
+
+| Metrik | Donuk ResNet (Deneme 4) | Donuk DINO (2813, aynı protokol) | Kısmen-eğitilebilir ResNet (Deneme 3) |
+|---|---|---|---|
+| `detection_mAP` | 0.0467 | 0.0095 | 0.0517 |
+| `seg_mIoU` | 0.0780 | 0.0559 | 0.1218 |
+| `cls_mAP` | 0.4128 | 0.2334 | 0.429 |
+| `cls_F1` | 0.4562 | 0.2684 | 0.409 |
+
+### Analiz
+- **Adil kıyas (donuk vs donuk, step 2813): ResNet dört metrikte de DINO'yu geçti** —
+  detection'da ~4.9x, classification'da ~1.8x. Beklentinin (DINO cls/seg'de öne çıkar)
+  aksine bu rejimde (az veri, 1 epoch, donuk) ResNet feature'ları + gerçek FPN daha güçlü.
+- ResNet donuk (0.0467) vs kısmen-eğitilebilir (0.0517) detection farkı küçük → 1 epoch'ta
+  backbone'u çözmenin katkısı henüz sınırlı; asıl fark omurga seçiminde (ResNet vs DINO),
+  donuk/çözük ayarında değil. Segmentation'da ise çözük backbone belirgin fark yaratıyor
+  (0.078 → 0.122), yani spatial görev backbone adaptasyonundan daha çok faydalanıyor.
+- Tam toplu tablo ve yorum: [RESULTS.md](RESULTS.md) (satır 6 + "Adil kıyas" bölümü).
+
+### Sonraki adım (opsiyonel)
+DINO'nun açığı protokolden mi yoksa omurgadan mı geldiğini ayırmak için: DINO `layers>0`
+(kısmen çözük) veya daha uzun koşu. Ama mevcut adil kıyas net bir sinyal veriyor.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO
@@ -182,13 +218,12 @@ ResNet-vs-DINO markdown tablosu üretir (aşağıya kopyalanır).
 **Tüm karşılaştırma sonuçları tek dosyada:** [RESULTS.md](RESULTS.md). Buradaki dağınık
 tabloları oraya taşıdık (tek kaynak, birbirinden sapmasın). Ham makine logu `runs/results.csv`.
 
-### ⚠️ Düzeltme — donuk (layers=0) ResNet hiç koşulmadı
-Yukarıdaki **Deneme 2**, `trainable_backbone_layers=0` (donuk backbone) diye kayıtlı ama
-o koşunun config'i doğrulanmadı (Deneme 3 notundaki flip-flop uyarısına bakınız). Kullanıcı
-teyidi: **ResNet hiçbir zaman layers=0 ile çalıştırılmadı** — yani güvenilir bir donuk-ResNet
-sonucu yok. Şu ana kadarki ResNet koşularının hepsi **layers=3** (kısmen eğitilebilir):
-step 200 (Deneme 1), 2813 (Deneme 3), 4500. DINO ise **layers=0** (donuk).
+### ✅ Çözüldü — donuk (layers=0) ResNet koşusu yapıldı (Deneme 4)
+Önceden eksikti: DINO `layers=0` (donuk), ResNet'in tüm koşuları `layers=3` (kısmen
+eğitilebilir) olduğu için kıyasta **protokol farkı** vardı. (Deneme 2 "layers=0" diye
+etiketliydi ama config'i doğrulanmamıştı — güvenilmez.)
 
-Sonuç: mevcut kıyasta backbone farkının yanında **protokol farkı** da var (kısmen-eğitilebilir
-ResNet vs donuk DINO). Birebir adil kıyas için eksik koşu — donuk ResNet — yapılmalı:
-`--overrides model.trainable_backbone_layers=0`. Detay ve boş tablo hücreleri [RESULTS.md](RESULTS.md)'de.
+**2026-07-04'te donuk ResNet 1 epoch koşuldu** (Deneme 4): det 0.0467 / seg 0.0780 /
+cls_mAP 0.4128 / cls_F1 0.4562. Artık "donuk ResNet vs donuk DINO" aynı adımda (2813)
+birebir kıyaslanabiliyor → dört metrikte de ResNet önde. Detay ve adil-kıyas tablosu
+[RESULTS.md](RESULTS.md)'de (satır 6 + "Adil kıyas" bölümü).
