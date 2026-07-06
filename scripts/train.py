@@ -8,6 +8,7 @@ the same script, driven entirely by --config and --overrides.
 from __future__ import annotations
 
 import argparse
+import math
 
 import torch
 from torch.utils.data import DataLoader
@@ -75,19 +76,27 @@ def main() -> None:
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
     logger = CsvLogger(out_dir="runs", run_name=cfg.train.run_name)
 
+    start_step = 0
     if args.resume:
-        # Warm-starts weights from a checkpoint (saved either mid-epoch via
-        # checkpoint_every_steps, or at a previous epoch's end). This
-        # re-iterates the dataloader from the start rather than resuming an
-        # exact dataloader position - simpler, and fine for interruption
-        # recovery since the model/optimizer state is what actually matters.
-        load_checkpoint(model, optimizer, args.resume, map_location=str(device))
-        print(f"Resumed weights from {args.resume}")
+        # Warm-starts weights+optimizer from a checkpoint (saved either mid-epoch
+        # via checkpoint_every_steps, or at a previous epoch's end) and recovers
+        # the global step so training continues across sessions/accounts. The
+        # partially-done epoch is re-iterated from the dataloader start rather
+        # than resuming an exact dataloader position - simpler, and fine since
+        # the model/optimizer state is what actually matters.
+        start_step = load_checkpoint(model, optimizer, args.resume, map_location=str(device))
+        print(f"Resumed from {args.resume} at global step {start_step}")
 
     print("Config:", config_to_dict(cfg))
 
-    step = 0
-    for epoch in range(cfg.train.epochs):
+    # Global adım + tamamlanan epoch'ları geri yükle: --resume kaldığı yerden devam eder
+    # (oturumlar/hesaplar arası). Tamamlanan epoch'lar atlanır; kısmen biten epoch tam olarak
+    # yeniden koşulur (dataloader baştan gezilir - checkpoint.py notu), adım sayacı süreklidir.
+    steps_per_epoch = math.ceil(len(dataset) / cfg.train.batch_size)
+    start_epoch = start_step // steps_per_epoch if steps_per_epoch else 0
+
+    step = start_step
+    for epoch in range(start_epoch, cfg.train.epochs):
         remaining_steps = None
         if cfg.train.max_steps is not None:
             remaining_steps = cfg.train.max_steps - step
@@ -109,7 +118,9 @@ def main() -> None:
             run_name=cfg.train.run_name,
         )
         save_checkpoint(
-            model, optimizer, epoch, f"{cfg.train.checkpoint_dir}/{cfg.train.run_name}_epoch{epoch}.pt"
+            model, optimizer, epoch,
+            f"{cfg.train.checkpoint_dir}/{cfg.train.run_name}_epoch{epoch}.pt",
+            step=step,
         )
 
     print(f"Training finished after {step} steps.")

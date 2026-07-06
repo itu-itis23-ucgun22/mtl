@@ -70,7 +70,7 @@ def train_one_epoch(
 
         if checkpoint_every_steps and step % checkpoint_every_steps == 0:
             path = Path(checkpoint_dir) / f"{run_name}_step{step}.pt"
-            save_checkpoint(model, optimizer, step, str(path))
+            save_checkpoint(model, optimizer, step, str(path), step=step)
             print(f"[checkpoint] saved {path}")
 
         if max_steps is not None and (step - start_step) >= max_steps:
