@@ -38,12 +38,19 @@ Bir görüntüyü **bir kere** ResNet50+FPN'den geçiriyoruz, çıkan feature pi
 formata çeviren ara katman). FPN, ResNet'e özgü değil — sadece bir neck; torchvision
 `resnet_fpn_backbone` ikisini tek pakette birleştirdiği için "backbone"un içinde görünür.
 Head'ler yalnızca neck'in **çıktı sözleşmesini** tüketir: `{"0","1","2","3","pool"}` (strides
-4/8/16/32/64, 256 kanal). `build_backbone(name, ...)` (`models/backbone.py`) iki seçenek verir:
+4/8/16/32/64, 256 kanal). `build_backbone(name, ...)` (`models/backbone.py`) şu seçenekleri verir:
 
 | `backbone_name` | gövde | neck |
 |---|---|---|
 | `resnet50` | ResNet50 | FPN |
 | `dino_vitb16` | DINOv1 ViT-B/16 | Simple Feature Pyramid (`models/dino_backbone.py`) |
+| `dinov2_vitb14`(`_reg`) | DINOv2 ViT-B/14 (opsiyonel 4 register) | Simple Feature Pyramid (`models/dinov2_backbone.py`) |
+| `dinov2_vits14`(`_reg`) | DINOv2 ViT-S/14 (opsiyonel 4 register) | Simple Feature Pyramid (`models/dinov2_backbone.py`) |
+
+DINOv2 (patch14), DINOv1 baseline'ını bozmamak için ayrı dosyada (`dinov2_backbone.py`); neck
+mantığı ortaktır, yalnızca patch/model farklıdır. DINOv2 boyutları (isim → timm modeli) o
+dosyadaki `DINOV2_MODELS` registry'sinde; yeni boyut eklemek tek satır (embed_dim ve register
+token'ları gövdeden dinamik okunur). patch14 girişleri 14'e bölünebilmeli (config'te 518).
 
 DINO (self-supervised ViT) *plain* bir transformer, tek çözünürlük (stride 16) üretir; FPN'in
 birleştireceği doğal hiyerarşi olmadığından FPN yerine ViTDet'in Simple Feature Pyramid'i tek

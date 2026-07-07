@@ -1,0 +1,45 @@
+# DINOv2 omurgalı tam koşu - DINOv1 konfigüne (train_colab_dino.yaml) paralel, tek fark
+# gövde: DINOv2 ViT-B/14 (+4 register) + Simple Feature Pyramid (bkz. src/mtl/models/dino_backbone.py).
+# Sonuçlar ResNet ve DINOv1 ile karşılaştırılacak (EXPERIMENTS.md "Karşılaştırma" tablosu).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  # DINOv2 patch14: img_size 14'e bölünebilmeli. 518 = 37x37 token, modelin native
+  # pretrain çözünürlüğü -> pos-embed interpolasyonu yok (en temiz feature'lar).
+  img_size: 518
+  num_workers: 4
+
+model:
+  # register'lı varyant (genelde daha stabil, temiz attention). Register'sız için: dinov2_vitb14.
+  # Daha hafif/hızlı seçenek: dinov2_vits14(_reg) (ViT-S, 384-dim).
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  # DINO için: eğitilebilir transformer bloğu sayısı (sondan). 0 = ViT tamamen donuk
+  # (kanonik SSL kullanımı, en az VRAM/en hızlı, ResNet/DINOv1 donuk koşularıyla adil kıyas).
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  # ViT-B/14 @518px = 1369 token, DINOv1@512 (1024 token) ve stride-4 seg logit'lerinden
+  # biraz ağır. 12 GB VRAM'de 4 ile başla; OOM olursa 2'ye indir, bol yer varsa çıkar.
+  # (AMP açık; donuk ViT aktivasyon saklamadığı için yardımcı.)
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2
+  checkpoint_every_steps: 500

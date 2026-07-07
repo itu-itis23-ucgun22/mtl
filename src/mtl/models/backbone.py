@@ -6,8 +6,10 @@
 bir neck. Head'ler neck'in çıktısını tüketir, hangi neck olduğunu umursamaz.
 
   - "resnet50": gövde ResNet50 + neck FPN (torchvision `resnet_fpn_backbone`).
-  - "dino_vitb16": gövde DINOv1 ViT-B/16 + neck Simple Feature Pyramid
-    (bkz. models/dino_backbone.py; gerekçe EXPERIMENTS.md "Kararlar" notu).
+  - "dino_vitb16": gövde DINOv1 ViT-B/16 + neck Simple Feature Pyramid (models/dino_backbone.py).
+  - "dinov2_vitb14"(_reg) / "dinov2_vits14"(_reg): gövde DINOv2 ViT + Simple Feature Pyramid
+    (models/dinov2_backbone.py; DINOv1 baseline'ı bozmamak için ayrı dosya).
+  (gerekçe EXPERIMENTS.md "Kararlar" notu).
 """
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ def build_backbone(
       - resnet50: eğitilebilir ResNet katmanı sayısı. 3 = stem+layer1 donuk, layer2-4
         eğitilebilir (~20k görüntüde ImageNet feature'larını felaketsiz fine-tune etmek
         için makul default). 0 = tüm gövde donuk, 5 = stem dahil hepsi eğitilebilir.
-      - dino_vitb16: eğitilebilir transformer bloğu sayısı (sondan). 0 = ViT tamamen
+      - dino* (DINOv1/DINOv2): eğitilebilir transformer bloğu sayısı (sondan). 0 = ViT tamamen
         donuk (kanonik SSL kullanımı; sadece neck+head'ler eğitilir), 12 = tüm ViT.
     """
     if name == "resnet50":
@@ -40,13 +42,19 @@ def build_backbone(
             trainable_layers=trainable_layers,
         )
 
+    # Lazy import'lar: timm sadece DINO omurgası istendiğinde gereksin (ResNet-only koşular
+    # ve ortamlar timm'siz de çalışsın). DINOv2 kendi dosyasında; DINOv1 baseline'ı bozulmaz.
+    if name.startswith("dinov2"):
+        from mtl.models.dinov2_backbone import Dinov2Backbone
+
+        return Dinov2Backbone(model_name=name, pretrained=pretrained, trainable_blocks=trainable_layers)
+
     if name in ("dino_vitb16", "dino"):
-        # Lazy import: timm sadece DINO omurgası istendiğinde gereksin (ResNet-only
-        # koşular ve ortamlar timm'siz de çalışsın).
         from mtl.models.dino_backbone import DinoBackbone
 
         return DinoBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
 
     raise NotImplementedError(
-        f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16'."
+        f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16', "
+        "'dinov2_vitb14', 'dinov2_vitb14_reg', 'dinov2_vits14', 'dinov2_vits14_reg'."
     )
