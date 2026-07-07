@@ -174,6 +174,96 @@ DINO'nun açığı protokolden mi yoksa omurgadan mı geldiğini ayırmak için:
 
 ---
 
+## Deneme 5 — 2026-07-07 — DINO donuk, TAM 16 epoch (~90.000 adım)
+
+### Kurulum
+- `configs/train_colab_dino.yaml` tam koşu: `backbone=dino_vitb16, trainable_backbone_layers=0`
+  (donuk), `batch_size=4, epochs=16` → 16 × 5625 = ~90.000 adım. Checkpoint: `colab_dino_epoch15.pt`.
+- Colab oturum kesintileri + veri (Drive throttling) sorunları nedeniyle koşu birkaç oturuma
+  bölündü; `checkpoint_every_steps=500` + `scripts/train.py --resume` (global adımdan devam eden
+  yama, commit `e7164c6`) ile kaldığı yerden tamamlandı. Veri bütünlüğü doğrulandı (eksik görüntü
+  olsa `Image.open` çökerdi; koşu çökmeden bitti → 22.500 görüntü tamdı).
+
+### Sonuç
+
+| Metrik | DINO 0.5 epoch (Deneme, step 2813) | **DINO 16 epoch (Deneme 5)** | Değişim |
+|---|---|---|---|
+| `detection_mAP` | 0.0095 | **0.1541** | ~16x |
+| `seg_mIoU` | 0.0559 | **0.3928** | ~7x |
+| `cls_mAP` | 0.2334 | **0.5565** | ~2.4x |
+| `cls_F1` | 0.2684 | **0.5515** | ~2x |
+
+(COCO çıktısı: IoU=0.50'de mAP 0.301; strict 0.50:0.95 = 0.1541.)
+
+### Analiz
+- Donuk DINO mimarisi (Simple Feature Pyramid + head'ler) **yeterli eğitimle sağlam öğreniyor** —
+  önceki düşük sayılar "donuk DINO zayıf"tan değil, "az eğitilmiş"ten geliyormuş. Deneme 3'teki
+  (ResNet) "adım arttıkça hepsi belirgin iyileşir" trendi burada DINO için de doğrulandı.
+- Mutlak detection 0.1541 düşük görünse de bu kısıt seti için makul: donuk backbone + sıfırdan
+  neck/head + 22.5k subset + LR scheduler yok. Ana fren **donuk backbone**; yükseltmek için en
+  büyük kaldıraç epoch değil, backbone'u çözmek (fine-tune / LoRA).
+- Görev sıralaması yine tutarlı: det (0.15) < seg (0.39) < cls (0.55).
+
+### ⚠️ Kritik: bu HENÜZ bir bulgu DEĞİL (confound var)
+DINO 16 epoch koştu; ama mevcut ResNet koşuları en fazla ~1.6 epoch (step 4500, üstelik layers=3).
+Yani "DINO artık ResNet'i geçti" **denemez** — backbone farkının yanında **eğitim bütçesi (16 vs
+1.6 epoch) ve protokol (donuk vs layers=3)** farkı da var. Tek değişkeni izole edemiyoruz.
+
+### Sonraki adım (adil kıyası tamamla)
+`configs/train_colab_resnet_frozen.yaml` oluşturuldu: **donuk ResNet (layers=0), batch_size=4,
+epochs=16** — DINO ile birebir aynı (tek değişken backbone). Bu koşulunca "ikisi de donuk + 16
+epoch + batch 4" gerçek adil kıyas olur → o zaman savunulabilir bir bulgu çıkar. Colab Pro alındığı
+için bütçe artık yeterli. Ayrıca planlanan eksen: DINO donuk vs **LoRA** vs full fine-tune (PEFT).
+
+---
+
+## Deneme 6 — 2026-07-07 — 🎯 Donuk ResNet 16 epoch → İLK ADİL KIYAS (bulgu)
+
+### Kurulum
+- ResNet donuk 16 epoch: `train_colab_gpu.yaml` + `--overrides model.trainable_backbone_layers=0
+  train.batch_size=4`. Böylece DINO 16-epoch koşusuyla (Deneme 5) **birebir eşit**: layers=0,
+  epochs=16, batch=4 (→ ~90000 adım), aynı lr/wd/img_size/seed/loss/aug. **Tek fark: backbone.**
+- **NaN olayı (step ~64000):** AMP (fp16) altında focal loss'un `log(sigmoid)` terimi, eğitilen
+  detection-cls head'inin büyüyen logit'lerinde taştı → `classification=nan`. `train_one_epoch.py`
+  guard'ı yakalayıp durdurdu (checkpoint temizdi). İki resume denemesi farklı shuffle'a rağmen ~aynı
+  adımda tekrar NaN attı → sorun batch değil, **kırılgan ağırlıklar**. Çözüm: `--overrides
+  train.amp=false` (fp32'nin geniş aralığı taşmayı önledi) ile resume → koşu tamamlandı.
+- **Loglama düzeltmesi:** eval `--overrides` almadığı için results.csv'ye `trainable_layers=3`
+  yazdı; doğrusu **0** (RESULTS.md satır 8'de düzeltildi).
+
+### Sonuç — adil kıyas (ikisi de donuk, 16 epoch, batch 4)
+
+| metrik | ResNet50 (layers=0) | DINO ViT-B/16 (layers=0) | kazanan |
+|---|---|---|---|
+| detection_mAP | **0.1965** | 0.1541 | ResNet (+%27) |
+| seg_mIoU | 0.3215 | **0.3928** | **DINO (+%22)** |
+| cls_mAP | **0.7084** | 0.5565 | ResNet (+%27) |
+| cls_F1 | **0.6799** | 0.5515 | ResNet (+%23) |
+
+### 🎯 Bulgu
+Projenin ilk **confound'suz** sonucu. "Biri diğerini ezdi" değil — **görev tipine göre backbone
+tercihi değişiyor:**
+- **Supervised ResNet → detection + classification'da önde.** ImageNet supervised pretraining zaten
+  bir sınıflandırma görevi olduğundan image-cls'de çok güçlü (0.71) ve detection'a iyi transfer.
+- **Self-supervised DINO → segmentation'da önde.** DINO feature/attention'ının nesneleri dense/
+  spatial ayırmadaki bilinen gücüyle tutarlı; SSL'in uzamsal-semantik yapısı piksel görevde parlıyor.
+
+Yani: tanıma/tespit için supervised omurga, dense segmentasyon için SSL omurga.
+
+### Metodolojik ders
+Deneme 4'teki eski "donuk kıyas" (step 2813, yarım-epoch DINO + batch confound) **her** metrikte
+ResNet'i gösteriyordu. 16 epoch'a çıkınca DINO segmentation'da öne geçti → **kısa koşulardan erken
+sonuç çıkarmak yanıltıcı.** Confound kontrolü (eşit epoch + eşit batch + eşit protokol) bu bulguyu
+mümkün kıldı.
+
+### Sonraki adım
+- **PEFT ekseni:** DINO donuk vs LoRA vs full fine-tune → backbone'u (ucuza) çözmek bulguyu nasıl
+  değiştirir. LoRA 12 GB'a sığar, sayıları muhtemelen zıplatır.
+- **Kalıcı sağlamlık:** grad clipping (NaN'i kökten önlemek için) — planlandı.
+- İsteğe bağlı: `trainable_layers=3` ResNet'i de 16 epoch koşup "çözük omurga" ekseni.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

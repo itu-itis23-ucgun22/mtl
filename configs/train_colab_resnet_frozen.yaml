@@ -1,0 +1,41 @@
+# Donuk (frozen) ResNet50 - DINO donuk koşusuyla BİREBİR adil kıyas için.
+# train_colab_gpu.yaml'ın kopyası; DINO (train_colab_dino.yaml) ile eşleşmesi için 3 fark:
+#   - trainable_backbone_layers: 0  (gövde tamamen donuk, DINO'nun layers=0'ıyla aynı protokol)
+#   - batch_size: 4                 (DINO ile eş batch -> eş gradyan güncellemesi = eş adım sayısı)
+#   - run_name: colab_resnet_frozen (checkpoint/CSV'de ayrı isim)
+# Diğer HER ŞEY (epochs=16, lr, wd, img_size, seed, loss ağırlıkları, aug) DINO ile aynı ->
+# tek değişken backbone. Bu yüzden override'a gerek yok; eval de bu config'i okuyup
+# results.csv'ye trainable_layers=0'ı DOĞRU loglar (eval.py --overrides kabul etmiyor).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: resnet50
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_resnet_frozen
+  checkpoint_every_steps: 500
