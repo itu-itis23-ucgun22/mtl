@@ -7,6 +7,8 @@ bir neck. Head'ler neck'in çıktısını tüketir, hangi neck olduğunu umursam
 
   - "resnet50": gövde ResNet50 + neck FPN (torchvision `resnet_fpn_backbone`).
   - "dino_vitb16": gövde DINOv1 ViT-B/16 + neck Simple Feature Pyramid (models/dino_backbone.py).
+  - "clip_vitb16": gövde CLIP ViT-B/16 (OpenAI) + neck Simple Feature Pyramid (models/clip_backbone.py;
+    DINOv1 ile aynı patch16 -> aynı grid; DINOv1 baseline'ı bozmamak için ayrı dosya).
   - "dinov2_vitb14"(_reg) / "dinov2_vits14"(_reg): gövde DINOv2 ViT + Simple Feature Pyramid
     (models/dinov2_backbone.py; DINOv1 baseline'ı bozmamak için ayrı dosya).
   (gerekçe EXPERIMENTS.md "Kararlar" notu).
@@ -54,7 +56,12 @@ def build_backbone(
 
         return DinoBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
 
+    if name in ("clip_vitb16", "clip"):
+        from mtl.models.clip_backbone import ClipBackbone
+
+        return ClipBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
+
     raise NotImplementedError(
-        f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16', "
+        f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16', 'clip_vitb16', "
         "'dinov2_vitb14', 'dinov2_vitb14_reg', 'dinov2_vits14', 'dinov2_vits14_reg'."
     )

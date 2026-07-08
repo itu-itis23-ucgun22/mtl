@@ -48,14 +48,36 @@ class MultiTaskModel(nn.Module):
     def forward(self, images: Tensor, targets: Optional[List[Dict[str, Tensor]]] = None):
         if self.training and targets is None:
             raise ValueError("targets must be provided in training mode")
+        _, _, height, width = images.shape
+        features = self.backbone(images)  # OrderedDict: "0".."3" (+ "pool")
+        return self._run_heads(features, (height, width), images.device, targets)
 
-        batch_size, _, height, width = images.shape
+    def forward_from_trunk(
+        self, trunk: Tensor, image_hw: tuple, targets: Optional[List[Dict[str, Tensor]]] = None
+    ):
+        """Önceden hesaplanmış DONUK backbone trunk çıktısından neck+head koşar; backbone atlanır.
+
+        trunk: `backbone.trunk_forward(images)` çıktısı, (B, embed, h, w). image_hw: yeniden
+        boyutlanmış görüntü boyutu (H, W) - anchor stride'ı ve seg upsample için gerekli.
+        Yalnızca `neck_forward`'ı olan backbone'larda (DINO ailesi) geçerli. Feature-caching
+        eğitimi bunu kullanır (scripts/train_cached.py): pahalı ViT forward'ı atlanır.
+        """
+        if self.training and targets is None:
+            raise ValueError("targets must be provided in training mode")
+        features = self.backbone.neck_forward(trunk)
+        return self._run_heads(features, image_hw, trunk.device, targets)
+
+    def _run_heads(self, features, image_hw, device, targets):
+        """features (5-seviye piramit) -> üç head. forward ve forward_from_trunk'ın ortak yolu."""
+        height, width = image_hw
+        features_list = list(features.values())
+        batch_size = features_list[0].shape[0]
         image_sizes = [(height, width)] * batch_size
 
-        features = self.backbone(images)  # OrderedDict: "0".."3" (+ "pool")
-        features_list = list(features.values())
-
-        image_list = ImageList(images, image_sizes)
+        # Anchor generator yalnızca image_list.tensors.shape[-2:]'i okur (dtype/device feature'dan
+        # gelir); gerçek görüntü içeriği gerekmez, o yüzden hafif bir dummy yeter - bu sayede
+        # cache'ten (görüntüsüz) çalışırken de anchor'lar aynı üretilir.
+        image_list = ImageList(torch.empty((batch_size, 1, height, width), device=device), image_sizes)
         anchors = self.detection_model.anchor_generator(image_list, features_list)
         det_head_outputs = self.detection_model.head(features_list)
 

@@ -17,6 +17,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 6 | dino_vitb16 | 0                | 2813 | 0.0095        | 0.0559   | 0.2334  | 0.2684 | adil kıyaslama olmadığını fark ettim. 5625 adım olması gerekiyor 1 epoch'un tamamlanabilmesi için.
 | 7 | dino_vitb16 | 0                | ~90000 | 0.1541      | 0.3928   | 0.5565  | 0.5515 | **16 epoch tam koşu** — EXPERIMENTS Deneme 5 |
 | 8 | resnet50    | 0                | ~90000 | 0.1965      | 0.3215   | 0.7084  | 0.6799 | **16 epoch donuk — ADİL KIYAS (Deneme 6)**; batch 4. (results.csv layers=3 yanlış logladı; doğrusu 0) |
+| 9 | dinov2_vitb14_reg | 0          | ~90000 | 0.2300      | 0.6011   | 0.7800  | 0.7239 | **16 epoch donuk — DÖRT METRİKTE DE EN İYİ (Deneme 7)**; batch 4, img 518 (patch14) |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /
@@ -89,6 +90,35 @@ loss-ağırlıkları/augmentation. **Tek fark: backbone.** Bu yüzden farklar do
 > Not (metodoloji): Deneme 4'teki eski "donuk kıyas" (step 2813) her metrikte ResNet'i gösteriyordu
 > ama o **yarım epoch DINO** (batch confound) + 1 epoch'tu. 16 epoch'a çıkınca DINO segmentation'da
 > öne geçti → kısa koşulardan erken sonuç çıkarmanın tehlikesinin somut kanıtı.
+
+## 🎯🎯 GÜNCEL BULGU — Üç omurga: ResNet vs DINOv1 vs DINOv2 (hepsi donuk, 16 epoch, batch 4)
+
+DINOv2 eklendi (Deneme 7). Üçü de aynı protokolde (donuk, 16 epoch, batch 4, aynı lr/seed/loss/aug),
+tek fark backbone → tam kontrollü.
+
+| metrik | resnet50 (supervised) | dino_vitb16 (SSL v1) | **dinov2_vitb14_reg (SSL v2)** | kazanan |
+|---|---|---|---|---|
+| detection_mAP | 0.1965 | 0.1541 | **0.2300** | **DINOv2** |
+| seg_mIoU | 0.3215 | 0.3928 | **0.6011** | **DINOv2** (açık ara) |
+| cls_mAP | 0.7084 | 0.5565 | **0.7800** | **DINOv2** |
+| cls_F1 | 0.6799 | 0.5515 | **0.7239** | **DINOv2** |
+
+**Bulgu: DINOv2 dört metrikte de en iyi — ve segmentasyonda uçtan (0.60 vs ResNet 0.32 / DINOv1 0.39).**
+Bu, önceki iki-yönlü bulguyu **rafine ediyor:** DINOv1 vs ResNet'te "görev tipine göre değişir" (ResNet
+det/cls, DINO seg) demiştik. Ama **daha güçlü SSL (DINOv2)** gelince tablo değişiyor — SSL omurga artık
+**detection ve classification'da bile** supervised ResNet'i geçiyor, sadece seg'de değil. Yani "supervised
+tanıma/tespitte önde" sonucu **DINOv1'e özgüydü**; pretraining kalitesi artınca SSL her yerde öne çıkıyor.
+
+### ⚠️ Yorum nüansı (WHY): DINOv2'nin üstünlüğü üç şeyin toplamı
+DINOv2'nin farkı sadece "daha iyi SSL yöntemi/veri (LVD-142M)" değil; **kontrol edilmeyen iki ek fark** var:
+1. **patch14 + img 518** → feature grid **37×37** (DINOv1 patch16@512 → 32×32; ResNet-FPN farklı).
+   Daha ince grid, özellikle **dense segmentasyon**'da avantaj sağlar — 0.60 mIoU'nun bir kısmı bundan olabilir.
+2. **register token'lar** (`_reg`) → daha temiz attention.
+
+Bunlar "DINOv2'nin parçası" (haksız tweak değil), ama üstünlüğün ne kadarı **pretraining kalitesi** ne kadarı
+**ince patch/register** ondan emin olmak için: DINOv2'yi patch16-eş bir ayarla ya da `_reg`'siz koşmak ayrı
+bir ablasyon olur. Yine de mutlak sonuç net: **donuk DINOv2, bu multi-task dense rejimde en güçlü omurga.**
+(Küçük ilginçlik: ince patch'e rağmen DINOv2 small-object AP hâlâ düşük, 0.036 — büyük/orta nesnede çok güçlü.)
 
 ## Nasıl güncellenir
 - Colab'da her `scripts/eval.py` koşusu `runs/results.csv`'ye satır ekler.

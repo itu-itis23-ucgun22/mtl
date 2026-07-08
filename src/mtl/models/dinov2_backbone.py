@@ -119,8 +119,13 @@ class Dinov2Backbone(nn.Module):
         h, w = h_img // self.patch_size, w_img // self.patch_size
         return patch_tokens.transpose(1, 2).reshape(b, -1, h, w)  # (B, embed, h, w)
 
-    def forward(self, images: Tensor) -> Dict[str, Tensor]:
-        x = self._tokens_to_grid(images)  # stride 16 (nominal)
+    def trunk_forward(self, images: Tensor) -> Tensor:
+        """DONUK ViT gövdesinin çıktısı: (B, embed, h, w) grid. Feature-caching için ayrıldı
+        (bkz. dino_backbone.py trunk_forward + scripts/precompute_features.py)."""
+        return self._tokens_to_grid(images)
+
+    def neck_forward(self, x: Tensor) -> Dict[str, Tensor]:
+        """EĞİTİLEBİLİR neck (Simple Feature Pyramid): trunk grid -> 5-seviye piramit."""
         p0 = self.out0(self.up4(x))                               # stride 4
         p1 = self.out1(self.up2(x))                               # stride 8
         p2 = self.out2(x)                                         # stride 16
@@ -128,3 +133,6 @@ class Dinov2Backbone(nn.Module):
         # "pool": torchvision LastLevelMaxPool ile aynı (stride 64) - RetinaNet 5 seviye ister
         pool = F.max_pool2d(p3, kernel_size=1, stride=2, padding=0)
         return OrderedDict([("0", p0), ("1", p1), ("2", p2), ("3", p3), ("pool", pool)])
+
+    def forward(self, images: Tensor) -> Dict[str, Tensor]:
+        return self.neck_forward(self.trunk_forward(images))

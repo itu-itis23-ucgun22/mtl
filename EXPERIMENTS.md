@@ -264,6 +264,49 @@ mümkün kıldı.
 
 ---
 
+## Deneme 7 — 2026-07-07 — 🎯🎯 DINOv2 donuk 16 epoch → ÜÇ OMURGA, DINOv2 DÖRT METRİKTE EN İYİ
+
+### Kurulum
+- `configs/train_colab_dinov2.yaml`: `backbone=dinov2_vitb14_reg` (register'lı ViT-B/14), donuk
+  (layers=0), 16 epoch, batch 4, **img_size 518** (patch14 için 14'e bölünebilir). ResNet/DINOv1
+  16-epoch koşularıyla aynı protokol (lr/wd/seed/loss/aug). Checkpoint: `colab_dinov2_epoch15.pt`.
+- Koşu birkaç oturuma bölündü (runtime/Drive kesintileri); `--resume epoch13.pt` (temiz epoch
+  sınırı) ile tamamlandı. Not: bir ara `--overrides train.amp=false` denendi ama DINOv2 NaN
+  atmadığı için gereksizdi (sadece yavaşlattı); AMP açık asıl koşu.
+
+### Sonuç — üç omurga (hepsi donuk, 16 epoch, batch 4)
+
+| metrik | ResNet50 | DINO ViT-B/16 (v1) | **DINOv2 ViT-B/14 (+reg)** | kazanan |
+|---|---|---|---|---|
+| detection_mAP | 0.1965 | 0.1541 | **0.2300** | DINOv2 |
+| seg_mIoU | 0.3215 | 0.3928 | **0.6011** | DINOv2 (açık ara) |
+| cls_mAP | 0.7084 | 0.5565 | **0.7800** | DINOv2 |
+| cls_F1 | 0.6799 | 0.5515 | **0.7239** | DINOv2 |
+
+(COCO çıktısı: IoU=0.50'de mAP 0.412; medium/large AP 0.29/0.42 güçlü, small 0.036 zayıf.)
+
+### 🎯 Bulgu — önceki iki-yönlü sonucu rafine ediyor
+Deneme 6'da "DINOv1 vs ResNet: göreve göre değişir (ResNet det/cls, DINO seg)" demiştik. **DINOv2
+gelince tablo değişiyor:** daha güçlü SSL, **detection ve classification'da bile** supervised ResNet'i
+geçiyor — sadece seg'de değil. Yani "supervised tanıma/tespitte önde" sonucu **DINOv1'e özgüymüş**;
+pretraining kalitesi artınca **SSL her görevde öne çıkıyor**. Özellikle segmentasyon uçtan (0.60 vs
+0.32/0.39) — SSL'in dense/spatial gücünün en net kanıtı.
+
+### ⚠️ Yorum nüansı (kontrol edilmeyen iki fark)
+DINOv2'nin üstünlüğü sadece "daha iyi SSL yöntemi/veri (LVD-142M)" değil; iki ek fark var:
+1. **patch14 + img 518** → feature grid 37×37 (DINOv1 32×32'den ince) — dense seg'e avantaj.
+2. **register token'lar** (`_reg`) → temiz attention.
+Bunlar "DINOv2'nin parçası", haksız tweak değil; ama üstünlüğün ne kadarı **pretraining** ne kadarı
+**ince patch/register** ondan emin olmak için ayrı ablasyon gerekir (patch16-eş ayar / `_reg`'siz).
+Mutlak sonuç yine de net: **donuk DINOv2 bu multi-task dense rejimde en güçlü omurga.**
+
+### Sonraki adım
+- Foundation-model sweep'e devam: **CLIP** (dil-supervised) ve **SAM** (seg-native) → ROADMAP Faz 1.
+  Artık feature-caching altyapısı hazır (precompute → train_cached), donuk sweep ucuz.
+- PEFT ekseni (LoRA) + grad clipping hâlâ sırada.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

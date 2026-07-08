@@ -1,0 +1,42 @@
+# CLIP omurgalı tam koşu - DINOv1 konfigüne (train_colab_dino.yaml) paralel, tek fark
+# gövde: CLIP ViT-B/16 (OpenAI) + Simple Feature Pyramid (src/mtl/models/clip_backbone.py).
+# CLIP patch16 olduğu için DINOv1 ile AYNI grid (512px -> 32x32): "aynı mimari, farklı
+# pretraining (dil-contrastive vs SSL)" -> en temiz kıyas. Donuk (layers=0) -> feature-caching
+# akışı: precompute_features -> train_cached -> eval (ROADMAP.md varsayılan iş akışı).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: clip_vitb16
+  pretrained: true
+  # CLIP için: eğitilebilir transformer bloğu sayısı (sondan). 0 = ViT tamamen donuk
+  # (kanonik; en az VRAM/en hızlı, DINOv1/DINOv2 ile adil kıyas). Normalizasyon backbone
+  # içinde ImageNet->CLIP'e çevrilir (clip_backbone.py), transforms.py'ye dokunulmaz.
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  # ViT-B/16 @512px = 1024 token; 12 GB VRAM'de batch 4 (DINOv1 ile aynı). Sığmazsa 2.
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_clip
+  checkpoint_every_steps: 500
