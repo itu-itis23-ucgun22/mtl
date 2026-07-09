@@ -10,12 +10,15 @@
 Not: Augmentation yoktur (cache flip'siz). Checkpoint tam model state'ini içerir (donuk ViT
 ağırlıkları da) -> normal eval.py ile uyumludur. ViT-B ~344 MB/checkpoint olduğu için burada
 yalnızca EPOCH sonu checkpoint'i yazılır (cached eğitim hızlı; ara checkpoint gerekmez).
+Oturum koparsa --resume checkpoints/<run>_cached_epoch<N>.pt ile kaldığın epoch'tan devam:
+tamamlanan epoch'lar atlanır (ör. epoch12 -> epoch13'ten sürer).
 Foundation-model sweep'inde her donuk backbone için bir kez precompute + hızlı head eğitimi:
 bkz. ROADMAP.md.
 """
 from __future__ import annotations
 
 import argparse
+import math
 
 import torch
 from torch.utils.data import DataLoader
@@ -24,7 +27,7 @@ from mtl.config import config_to_dict, load_config
 from mtl.datasets.cached_features import CachedFeatureDataset
 from mtl.datasets.coco_multitask import CocoMultiTaskDataset
 from mtl.datasets.collate import collate_fn
-from mtl.engine.checkpoint import save_checkpoint
+from mtl.engine.checkpoint import load_checkpoint, save_checkpoint
 from mtl.losses.joint_loss import combine_losses
 from mtl.models.multitask_model import MultiTaskModel
 from mtl.utils.device import resolve_device
@@ -40,6 +43,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--features-dir", default=None, help="varsayılan: features/<run_name>/train")
+    parser.add_argument(
+        "--resume", default=None,
+        help="epoch checkpoint'inden devam et (ör. checkpoints/colab_clip_cached_epoch12.pt); "
+             "tamamlanan epoch'lar atlanır, kaldığın epoch'tan devam edilir.",
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -76,14 +84,24 @@ def main() -> None:
     optimizer = torch.optim.AdamW(params, lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
     logger = CsvLogger(out_dir="runs", run_name=cfg.train.run_name + "_cached")
 
+    # --resume: kaydedilen global adımdan devam. train_cached checkpoint'i epoch SONUNDA
+    # step=(epoch+1)*steps_per_epoch ile yazar; bu yüzden step//steps_per_epoch tam olarak
+    # bir sonraki (yarım kalmamış) epoch'u verir. Tamamlanan epoch'lar atlanır.
+    start_step = 0
+    if args.resume:
+        start_step = load_checkpoint(model, optimizer, args.resume, map_location=str(device))
+        print(f"Resumed from {args.resume} @ global step {start_step}")
+    steps_per_epoch = math.ceil(len(dataset) / cfg.train.batch_size)
+    start_epoch = start_step // steps_per_epoch
+
     print("Config:", config_to_dict(cfg))
     print(f"Feature cache: {feat_dir} | eğitilebilir tensör sayısı: {len(params)}")
 
     img_hw = (cfg.data.img_size, cfg.data.img_size)
     scaler = torch.amp.GradScaler("cuda", enabled=cfg.train.amp and device.type == "cuda")
     model.train()
-    step = 0
-    for epoch in range(cfg.train.epochs):
+    step = start_step
+    for epoch in range(start_epoch, cfg.train.epochs):
         for trunk, targets in loader:
             trunk = trunk.to(device)
             targets = _move_targets(targets, device)
