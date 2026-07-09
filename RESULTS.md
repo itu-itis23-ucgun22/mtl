@@ -18,6 +18,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 7 | dino_vitb16 | 0                | ~90000 | 0.1541      | 0.3928   | 0.5565  | 0.5515 | **16 epoch tam koşu** — EXPERIMENTS Deneme 5 |
 | 8 | resnet50    | 0                | ~90000 | 0.1965      | 0.3215   | 0.7084  | 0.6799 | **16 epoch donuk — ADİL KIYAS (Deneme 6)**; batch 4. (results.csv layers=3 yanlış logladı; doğrusu 0) |
 | 9 | dinov2_vitb14_reg | 0          | ~90000 | 0.2300      | 0.6011   | 0.7800  | 0.7239 | **16 epoch donuk — DÖRT METRİKTE DE EN İYİ (Deneme 7)**; batch 4, img 518 (patch14) |
+| 10 | clip_vitb16 | 0                | ~90000 | 0.1420      | 0.4398   | 0.6899  | 0.6501 | **16 epoch donuk — CLIP (Deneme 8)**; batch 4, img 512 (patch16, DINOv1 ile AYNI grid); cache'li, fp32 (--no-amp). AP@0.50=0.305 |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /
@@ -119,6 +120,39 @@ Bunlar "DINOv2'nin parçası" (haksız tweak değil), ama üstünlüğün ne kad
 **ince patch/register** ondan emin olmak için: DINOv2'yi patch16-eş bir ayarla ya da `_reg`'siz koşmak ayrı
 bir ablasyon olur. Yine de mutlak sonuç net: **donuk DINOv2, bu multi-task dense rejimde en güçlü omurga.**
 (Küçük ilginçlik: ince patch'e rağmen DINOv2 small-object AP hâlâ düşük, 0.036 — büyük/orta nesnede çok güçlü.)
+
+## 🎯🎯🎯 GÜNCEL BULGU — Dört omurga + EN TEMİZ kıyas: CLIP vs DINOv1 (donuk, 16 epoch, batch 4)
+
+CLIP ViT-B/16 eklendi (Deneme 8). Dördü de aynı protokolde. CLIP, **DINOv1 ile aynı ViT-B/16 + patch16
++ 32×32 grid** olduğu için aralarındaki **tek fark pretraining sinyali** (dil-contrastive vs SSL) → tezin
+"pretraining sinyali downstream'i öngörür mü?" sorusunun en confound'suz test noktası (DINOv2'deki patch/register
+karışıklığı yok).
+
+| metrik | resnet50 (supervised) | dino_vitb16 (SSL) | **clip_vitb16 (dil)** | dinov2_vitb14_reg (SSL v2) | sıralama |
+|---|---|---|---|---|---|
+| detection_mAP | 0.1965 | 0.1541 | **0.1420** | **0.2300** | DINOv2 > ResNet > DINOv1 > **CLIP** |
+| seg_mIoU | 0.3215 | 0.3928 | **0.4398** | **0.6011** | DINOv2 > **CLIP** > DINOv1 > ResNet |
+| cls_mAP | 0.7084 | 0.5565 | **0.6899** | **0.7800** | DINOv2 > ResNet > **CLIP** > DINOv1 |
+| cls_F1 | 0.6799 | 0.5515 | **0.6501** | **0.7239** | DINOv2 > ResNet > **CLIP** > DINOv1 |
+
+**Bulgu 1 — CLIP vs DINOv1 (aynı mimari, farklı pretraining):** CLIP, DINOv1'i **seg + iki cls metriğinde
+açık ara** geçiyor (cls_mAP 0.69 vs 0.56), sadece **detection'da hafif geride** (0.142 vs 0.154). Yani
+**dil-contrastive pretraining, SSL-distillation'a göre daha güçlü SEMANTİK feature** veriyor — image-text
+eşleştirme amacı doğrudan tanımaya (classification) ve nesne-semantiğine (segmentation) hizmet ediyor.
+
+**Bulgu 2 — CLIP'in zayıf noktası: LOKALİZASYON.** CLIP detection'da **dört omurganın en düşüğü** (0.142),
+AP@0.75 sadece 0.118. Bu da beklenen: CLIP'in image-text kontrastif amacı **global/semantik**tir, kesin
+kutu lokalizasyonunu ödüllendirmez. "İyi tanır, kötü yerleştirir" → dense tahminde net bir karakter.
+
+**Bulgu 3 — genel resim:** DINOv2 hâlâ **dört metrikte de lider**. Omurgalar bir spektrum çiziyor:
+supervised (ResNet) tanıma/tespit dengeli; SSL-v1 (DINOv1) seg-eğilimli ama zayıf; **dil (CLIP)
+semantik-güçlü/lokalizasyon-zayıf**; SSL-v2 (DINOv2) her yerde en iyi. Tezin cevabı **evet**: pretraining
+sinyali, hangi downstream görevde parlayacağını öngörüyor.
+
+> Not (küçük confound): CLIP koşusu fp32 (`--no-amp`, focal-loss NaN'ından kaçınmak için), diğerleri AMP'liydi.
+> fp32 sayısal olarak daha doğru olduğundan bu CLIP'i haksız yere zayıflatmaz; nihai metrikleri anlamlı etkilemez.
+> Ayrıca CLIP kendi native normalizasyonuyla beslendi (clip_backbone.py içinde ImageNet→CLIP), her omurga
+> kendi ön-işlemesini aldığı için adil.
 
 ## Nasıl güncellenir
 - Colab'da her `scripts/eval.py` koşusu `runs/results.csv`'ye satır ekler.

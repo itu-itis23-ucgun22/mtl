@@ -307,6 +307,48 @@ Mutlak sonuç yine de net: **donuk DINOv2 bu multi-task dense rejimde en güçl�
 
 ---
 
+## Deneme 8 — 2026-07-09 — 🎯🎯🎯 CLIP donuk 16 epoch → DÖRT OMURGA + EN TEMİZ KIYAS (CLIP vs DINOv1)
+
+### Kurulum
+- `configs/train_colab_clip.yaml`: `backbone=clip_vitb16` (OpenAI CLIP ViT-B/16), donuk (layers=0),
+  16 epoch, batch 4, **img_size 512** (patch16 → 32×32 grid). Checkpoint: `colab_clip_cached_epoch15.pt`.
+- **Feature-caching akışı** (ROADMAP varsayılanı): precompute trunk → train_cached (neck+head). Donuk
+  trunk deterministik olduğu için ViT forward bir kez koşuldu.
+- **fp32 (`--no-amp`):** cached eğitimde focal-loss fp16 NaN'ı tekrarladı; AMP kapatıldı. Cached modda
+  ViT forward atlandığı için AMP faydası ~yok → fp32 bedava, NaN'ı tamamen kaldırdı (grad-clip de eklendi).
+- **Normalizasyon:** CLIP kendi native norm'uyla beslendi (clip_backbone.py içinde ImageNet→CLIP;
+  transforms.py'ye dokunulmadı). Her omurga kendi ön-işlemesini alır → adil.
+- **Neden en temiz kıyas:** CLIP ViT-B/16, **DINOv1 ile aynı mimari + patch16 + 32×32 grid** → aralarındaki
+  tek fark **pretraining sinyali** (dil-contrastive vs SSL). DINOv2'deki patch/register confound'u yok.
+
+### Sonuç — dört omurga (hepsi donuk, 16 epoch, batch 4)
+
+| metrik | ResNet50 | DINOv1 | **CLIP ViT-B/16** | DINOv2 | sıralama |
+|---|---|---|---|---|---|
+| detection_mAP | 0.1965 | 0.1541 | **0.1420** | 0.2300 | DINOv2 > ResNet > DINOv1 > **CLIP** |
+| seg_mIoU | 0.3215 | 0.3928 | **0.4398** | 0.6011 | DINOv2 > **CLIP** > DINOv1 > ResNet |
+| cls_mAP | 0.7084 | 0.5565 | **0.6899** | 0.7800 | DINOv2 > ResNet > **CLIP** > DINOv1 |
+| cls_F1 | 0.6799 | 0.5515 | **0.6501** | 0.7239 | DINOv2 > ResNet > **CLIP** > DINOv1 |
+
+(COCO çıktısı: AP@0.50=0.305, AP@0.75=0.118; small 0.031 / medium 0.131 / large 0.269.)
+
+### 🎯 Bulgu
+1. **CLIP vs DINOv1 (aynı mimari, farklı pretraining):** CLIP, DINOv1'i **seg + iki cls metriğinde açık ara**
+   geçer (cls_mAP 0.69 vs 0.56), sadece **detection'da hafif geride** (0.142 vs 0.154). → **Dil-contrastive
+   pretraining, SSL-distillation'a göre daha güçlü SEMANTİK feature** verir; image-text amacı doğrudan
+   tanıma (classification) ve nesne-semantiğine (segmentation) hizmet eder.
+2. **CLIP'in zayıf noktası = lokalizasyon.** Detection'da **dört omurganın en düşüğü** (0.142, AP@0.75 0.118).
+   CLIP'in global/semantik amacı kesin kutu lokalizasyonunu ödüllendirmez → "iyi tanır, kötü yerleştirir".
+3. **Genel resim:** DINOv2 hâlâ **dört metrikte lider**. Omurgalar bir spektrum: supervised (dengeli),
+   SSL-v1 (seg-eğilimli/zayıf), **dil (semantik-güçlü/lokalizasyon-zayıf)**, SSL-v2 (her yerde en iyi).
+   Tezin cevabı **evet**: pretraining sinyali hangi downstream görevde parlayacağını öngörüyor.
+
+### Sonraki adım
+- Sweep'in son paradigması: **SAM** (segmentation-native image encoder) → ROADMAP Faz 1'i kapatır.
+- Sonra Faz 2 (adaptasyon: donuk → LoRA → full) ve Faz 3 ablasyonları.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

@@ -60,14 +60,15 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 |---|---|---|---|
 | 1 | Supervised classification | resnet50 (ImageNet) | ✅ var (RESULTS satır 8) |
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
-| 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ wrapper var (clip_backbone.py); ⏳ sweep koşusu |
+| 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | SAM (image encoder) | ☐ backbone wrapper gerek |
 | (5)| Predictive SSL | I-JEPA | ☐ opsiyonel |
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |
 
 - [ ] DINOv2 sweep koşusu (cache + train_cached + eval).
 - [x] CLIP wrapper (`clip_backbone.py`, DINO desenini izler; patch16 → DINOv1 ile aynı grid;
-      norm backbone içinde ImageNet→CLIP). [ ] CLIP sweep koşusu (precompute → train_cached → eval).
+      norm backbone içinde ImageNet→CLIP). [x] CLIP sweep koşuldu (Deneme 8): CLIP vs DINOv1 en temiz
+      kıyas → dil-pretraining semantik-güçlü/lokalizasyon-zayıf; DINOv2 hâlâ dört metrikte lider.
 - [ ] SAM wrapper (`sam_backbone.py`) → sweep.
 - Not: DINOv1/v2/v3 hepsini koşma (aynı aile, tekrar). Birini temsilci al; ilerlemeyi istersen
   küçük bir alt-çalışma olarak göster.
