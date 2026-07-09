@@ -1,0 +1,44 @@
+# I-JEPA omurgalı tam koşu - predictive-SSL paradigma temsilcisi (ROADMAP Faz 1, opsiyonel).
+# Gövde: I-JEPA ViT-H/14 (HuggingFace transformers, facebook/ijepa_vith14_1k) + Simple Feature
+# Pyramid (src/mtl/models/ijepa_backbone.py). patch14 -> img_size 518 (DINOv2 gibi, 37x37 grid).
+#
+# ⚠️ İKİ UYARI:
+#   1. `transformers` gerekli (notebook hücresi pip install yapar).
+#   2. ViT-H (632M) -> diğerleri ViT-B; BOYUT CONFOUND'u (sonucu bu notla raporla). Ayrıca
+#      feature-cache ~80 GB (/content'e sığmayabilir) ve VRAM ağır -> batch_size 2. Sığmazsa
+#      cache yerine düz scripts/train.py veya küçük subset (n_images düşür).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: ijepa_vith14
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  # ViT-H @518 çok ağır -> batch 2 (12 GB'de OOM olursa 1). Cached modda neck+head hafif,
+  # ama precompute (ViT-H forward) yavaş; canlı train.py daha da yavaş.
+  batch_size: 2
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_ijepa
+  checkpoint_every_steps: 500

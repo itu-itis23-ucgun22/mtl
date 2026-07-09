@@ -9,6 +9,10 @@ bir neck. Head'ler neck'in çıktısını tüketir, hangi neck olduğunu umursam
   - "dino_vitb16": gövde DINOv1 ViT-B/16 + neck Simple Feature Pyramid (models/dino_backbone.py).
   - "clip_vitb16": gövde CLIP ViT-B/16 (OpenAI) + neck Simple Feature Pyramid (models/clip_backbone.py;
     DINOv1 ile aynı patch16 -> aynı grid; DINOv1 baseline'ı bozmamak için ayrı dosya).
+  - "sam_vitb16": gövde SAM image encoder (timm samvit_base_patch16) + Simple Feature Pyramid
+    (models/sam_backbone.py; segmentation-native paradigma).
+  - "ijepa_vith14": gövde I-JEPA ViT-H/14 (HF transformers) + Simple Feature Pyramid
+    (models/ijepa_backbone.py; predictive-SSL paradigma; ViT-H -> boyut confound, bkz. dosya notu).
   - "dinov2_vitb14"(_reg) / "dinov2_vits14"(_reg): gövde DINOv2 ViT + Simple Feature Pyramid
     (models/dinov2_backbone.py; DINOv1 baseline'ı bozmamak için ayrı dosya).
   (gerekçe EXPERIMENTS.md "Kararlar" notu).
@@ -61,7 +65,18 @@ def build_backbone(
 
         return ClipBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
 
+    if name in ("sam_vitb16", "sam"):
+        from mtl.models.sam_backbone import SamBackbone
+
+        return SamBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
+
+    if name in ("ijepa_vith14", "ijepa"):
+        from mtl.models.ijepa_backbone import IjepaBackbone
+
+        return IjepaBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
+
     raise NotImplementedError(
         f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16', 'clip_vitb16', "
+        "'sam_vitb16', 'ijepa_vith14', "
         "'dinov2_vitb14', 'dinov2_vitb14_reg', 'dinov2_vits14', 'dinov2_vits14_reg'."
     )
