@@ -48,6 +48,11 @@ def main() -> None:
         help="epoch checkpoint'inden devam et (ör. checkpoints/colab_clip_cached_epoch12.pt); "
              "tamamlanan epoch'lar atlanır, kaldığın epoch'tan devam edilir.",
     )
+    parser.add_argument(
+        "--no-amp", action="store_true",
+        help="AMP'yi (fp16) kapat -> fp32 eğitim. focal-loss NaN taşmasına karşı güvenli. "
+             "Cached modda ViT forward atlandığı için AMP faydası ~yok, bedava kapanır.",
+    )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -98,7 +103,9 @@ def main() -> None:
     print(f"Feature cache: {feat_dir} | eğitilebilir tensör sayısı: {len(params)}")
 
     img_hw = (cfg.data.img_size, cfg.data.img_size)
-    scaler = torch.amp.GradScaler("cuda", enabled=cfg.train.amp and device.type == "cuda")
+    amp_enabled = cfg.train.amp and not args.no_amp and device.type == "cuda"
+    print(f"AMP (fp16): {'açık' if amp_enabled else 'KAPALI (fp32)'}")
+    scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
     model.train()
     step = start_step
     for epoch in range(start_epoch, cfg.train.epochs):
@@ -107,7 +114,7 @@ def main() -> None:
             targets = _move_targets(targets, device)
 
             optimizer.zero_grad()
-            with torch.amp.autocast("cuda", enabled=cfg.train.amp and device.type == "cuda"):
+            with torch.amp.autocast("cuda", enabled=amp_enabled):
                 loss_dict = model.forward_from_trunk(trunk, img_hw, targets)
                 total_loss, raw = combine_losses(loss_dict, cfg.loss)
 
@@ -115,6 +122,9 @@ def main() -> None:
                 raise RuntimeError(f"Non-finite loss at step {step}: {raw}")
 
             scaler.scale(total_loss).backward()
+            # Grad clipping: AMP fp16'da focal-loss gradyan patlamasına karşı (clip için önce unscale).
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(params, max_norm=10.0)
             scaler.step(optimizer)
             scaler.update()
 
