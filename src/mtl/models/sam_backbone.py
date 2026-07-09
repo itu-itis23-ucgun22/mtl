@@ -20,13 +20,29 @@ from typing import Dict
 
 import timm
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from mtl.models.sfp import SimpleFeaturePyramid
 
 SAM_MODEL = "samvit_base_patch16.sa1b"  # SAM ViT-B image encoder (SA-1B pretrained)
-SAM_IMG = 512  # config img_size ile EŞLEŞMELİ (SAM native 1024; sorun olursa 1024 yap)
+SAM_IMG = 512  # config img_size ile EŞLEŞMELİ; DINOv1/CLIP ile aynı 32x32 grid için 512
 OUT_CHANNELS = 256
+
+
+def _interp_pos_embed(pre: Tensor, cur_shape) -> Tensor:
+    """SAM pos_embed'i (1, H, W, C) -> (1, h, w, C) bicubic interpole eder (native 1024 -> 512)."""
+    _, h, w, _ = cur_shape
+    x = pre.permute(0, 3, 1, 2)  # (1, C, H, W)
+    x = F.interpolate(x, size=(h, w), mode="bicubic", align_corners=False)
+    return x.permute(0, 2, 3, 1).contiguous()  # (1, h, w, C)
+
+
+def _interp_rel_pos(pre: Tensor, cur_len: int) -> Tensor:
+    """rel_pos tablosunu (L, dim) -> (cur_len, dim) linear interpole eder (global-attention blokları)."""
+    x = pre.permute(1, 0).unsqueeze(0)  # (1, dim, L)
+    x = F.interpolate(x, size=cur_len, mode="linear", align_corners=False)
+    return x.squeeze(0).permute(1, 0).contiguous()  # (cur_len, dim)
 
 
 class SamBackbone(nn.Module):
@@ -34,6 +50,12 @@ class SamBackbone(nn.Module):
 
     forward(images) -> OrderedDict {"0".."pool"} (5 seviye, out_channels kanal).
     trainable_blocks: 0 = gövde donuk (kanonik sweep), N = son N blok eğitilebilir.
+
+    Pretrained yükleme: SAM ağırlıkları native 1024 (64x64 grid; global-attention bloklarının
+    pos_embed 64x64, rel_pos tabloları 127) içindir. 512'de (32x32, rel_pos 63) strict load şekil
+    uyuşmazlığı verir. Bu yüzden pretrained pozisyonel parametreleri INTERPOLE ederek yüklüyoruz
+    (ViT pos-embed interpolasyonu standart; SAM rel_pos'u runtime'da da interpole eder). Böylece SAM
+    diğer ViT'lerle aynı 512/32x32 grid'de kalır -> adil kıyas + küçük cache.
     """
 
     def __init__(
@@ -44,9 +66,12 @@ class SamBackbone(nn.Module):
         img_size: int = SAM_IMG,
     ):
         super().__init__()
+        # Modeli hedef çözünürlükte (512) rastgele-init kur; pretrained'i interpole ederek yükle.
         self.vit = timm.create_model(
-            SAM_MODEL, pretrained=pretrained, num_classes=0, img_size=img_size
+            SAM_MODEL, pretrained=False, num_classes=0, img_size=img_size
         )
+        if pretrained:
+            self._load_pretrained_interpolated()
         self._img_size = img_size
         self._set_trainable_blocks(trainable_blocks)
 
@@ -56,6 +81,28 @@ class SamBackbone(nn.Module):
         embed_dim = feat.shape[1]
         self.out_channels = out_channels
         self.sfp = SimpleFeaturePyramid(embed_dim, out_channels)
+
+    def _load_pretrained_interpolated(self) -> None:
+        """Native-1024 pretrained ağırlıkları al, pos_embed + rel_pos'u 512 grid'ine interpole et, yükle."""
+        pre = timm.create_model(SAM_MODEL, pretrained=True, num_classes=0).state_dict()
+        cur = self.vit.state_dict()
+        new = {}
+        for k, v in pre.items():
+            if k not in cur:
+                continue
+            if v.shape != cur[k].shape:
+                if k == "pos_embed":
+                    v = _interp_pos_embed(v, cur[k].shape)
+                elif k.endswith("rel_pos_h") or k.endswith("rel_pos_w"):
+                    v = _interp_rel_pos(v, cur[k].shape[0])
+                else:
+                    continue  # beklenmeyen uyuşmazlık -> atla (rastgele init kalır)
+            new[k] = v
+        missing, unexpected = self.vit.load_state_dict(new, strict=False)
+        # pos_embed / rel_pos dışında eksik kalan olmamalı (windowed bloklar zaten eşleşir).
+        leftover = [m for m in missing if not (m == "pos_embed" or "rel_pos" in m)]
+        if leftover:
+            print(f"[SamBackbone] uyarı: pretrained'de bulunamayan parametreler: {leftover[:6]}")
 
     def _set_trainable_blocks(self, trainable_blocks: int) -> None:
         for p in self.vit.parameters():

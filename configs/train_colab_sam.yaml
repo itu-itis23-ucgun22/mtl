@@ -1,8 +1,9 @@
 # SAM omurgalı tam koşu - segmentation-native paradigma temsilcisi (ROADMAP Faz 1).
 # Gövde: SAM image encoder (timm samvit_base_patch16.sa1b) + Simple Feature Pyramid
 # (src/mtl/models/sam_backbone.py). Donuk (layers=0) -> feature-caching akışı.
-# NOT: SAM native 1024; burada img_size=512 (SAM_IMG ile eşleşmeli). Pos-embed interp
-# sorun çıkarırsa sam_backbone.py'de SAM_IMG=1024 ve buradaki img_size=1024 yap (ağır).
+# NOT: SAM native 1024; burada img_size=512 -> DINOv1/CLIP ile aynı 32x32 grid (adil kıyas).
+# Pretrained pozisyonel parametreler (pos_embed + global-attention rel_pos) sam_backbone.py'de
+# 512 grid'ine INTERPOLE edilerek yükleniyor (native-1024 strict load şekil hatası verirdi).
 data:
   ann_file: data/coco_subset/annotations/instances_train_subset.json
   img_dir: data/coco_subset/images/train
