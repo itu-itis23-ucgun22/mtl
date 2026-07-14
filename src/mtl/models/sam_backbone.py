@@ -24,6 +24,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from mtl.models.sfp import SimpleFeaturePyramid
+from mtl.models.timm_weights import create_timm_model
 
 SAM_MODEL = "samvit_base_patch16.sa1b"  # SAM ViT-B image encoder (SA-1B pretrained)
 SAM_IMG = 512  # config img_size ile EŞLEŞMELİ; DINOv1/CLIP ile aynı 32x32 grid için 512
@@ -70,6 +71,7 @@ class SamBackbone(nn.Module):
         self.vit = timm.create_model(
             SAM_MODEL, pretrained=False, num_classes=0, img_size=img_size
         )
+        # (pretrained ağırlık aşağıda _load_pretrained_interpolated ile, native 1024'ten interpole edilerek)
         if pretrained:
             self._load_pretrained_interpolated()
         self._img_size = img_size
@@ -83,8 +85,10 @@ class SamBackbone(nn.Module):
         self.sfp = SimpleFeaturePyramid(embed_dim, out_channels)
 
     def _load_pretrained_interpolated(self) -> None:
-        """Native-1024 pretrained ağırlıkları al, pos_embed + rel_pos'u 512 grid'ine interpole et, yükle."""
-        pre = timm.create_model(SAM_MODEL, pretrained=True, num_classes=0).state_dict()
+        """Native-1024 pretrained ağırlıkları al, pos_embed + rel_pos'u 512 grid'ine interpole et, yükle.
+
+        Ağırlık MTL_WEIGHTS_DIR'den (yerel dosya) ya da HF'ten gelir - bkz. timm_weights.py."""
+        pre = create_timm_model(SAM_MODEL, pretrained=True, num_classes=0).state_dict()
         cur = self.vit.state_dict()
         new = {}
         for k, v in pre.items():

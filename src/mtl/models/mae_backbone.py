@@ -25,10 +25,10 @@ from __future__ import annotations
 
 from typing import Dict
 
-import timm
 from torch import Tensor, nn
 
 from mtl.models.sfp import SimpleFeaturePyramid
+from mtl.models.timm_weights import create_timm_model
 
 MAE_MODEL = "vit_base_patch16_224.mae"  # saf MAE pretrain (in1k fine-tune DEĞİL)
 PATCH_SIZE = 16
@@ -49,7 +49,9 @@ class MaeBackbone(nn.Module):
         out_channels: int = OUT_CHANNELS,
     ):
         super().__init__()
-        self.vit = timm.create_model(
+        # create_timm_model: MTL_WEIGHTS_DIR set + yerel .safetensors varsa oradan yükler,
+        # yoksa normal timm/HF yolu (bkz. models/timm_weights.py - Colab'da HF kopmalarina karsi).
+        self.vit = create_timm_model(
             MAE_MODEL,
             pretrained=pretrained,
             num_classes=0,
