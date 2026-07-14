@@ -6,13 +6,22 @@ değil) - farklı bir SSL paradigması.
 ⚠️ İKİ ÖNEMLİ UYARI (diğer omurgalardan farklı):
   1. **timm'de temiz tag yok -> HuggingFace `transformers` gerekir** (`IJepaModel`). Notebook
      hücresi `pip install transformers` yapar. Ağırlık HF'ten iner (`facebook/ijepa_vith14_1k`).
-  2. **Sadece ViT-H (632M) var** - diğer omurgalar ViT-B (~86M). Yani bu bir BOYUT CONFOUND'u:
+  2. **Sadece ViT-H (632M) var** - diğer omurgalar ViT-B (~86M). Yani bir BOYUT CONFOUND'u kalır:
      I-JEPA daha iyi çıkarsa "paradigma mı yoksa 7x daha büyük model mi" ayrışmaz. Sonucu bu notla
-     raporla. Ayrıca ViT-H feature-cache'i ~80 GB (patch14@518, 1369 token x1280) -> /content'e
-     sığmayabilir; sığmazsa cache yerine düz scripts/train.py (yavaş ama disk dostu) ya da küçük subset.
+     raporla. (Meta I-JEPA'nın ViT-B'sini yayınlamadı -> düzeltilemez.)
+
+Kaldırılan confound'lar (bilerek):
+  - GRID/ÇÖZÜNÜRLÜK: patch14 (518 -> 37x37) yerine **patch16 (512 -> 32x32)** varyantı seçildi
+    -> DINOv1/CLIP/SAM ile BİREBİR aynı grid. Kıyas bu eksende temiz.
+  - BATCH: cached eğitimde ViT hiç koşmaz (feature'lar hazır) -> VRAM'i neck+head belirler,
+    batch_size=4 sığar (diğerleriyle aynı). Precompute'ta VRAM darsa --batch-size küçültülebilir;
+    bu yalnızca feature çıkarmadır, gradyan yok -> adilliği ETKİLEMEZ.
+
+Depolama: cache ~59 GB (32x32 x 1280, fp16, 22.5k). /content'e sığmazsa düz scripts/train.py
+(yavaş ama disk dostu) ya da küçük subset.
 
 Normalizasyon: I-JEPA ImageNet norm'uyla eğitildi -> veri hattının ImageNet norm'u uygun,
-CLIP'teki gibi yeniden ölçekleme GEREKMEZ. patch14 -> img_size 14'e bölünebilmeli (DINOv2 gibi 518).
+CLIP'teki gibi yeniden ölçekleme GEREKMEZ.
 """
 from __future__ import annotations
 
@@ -23,9 +32,11 @@ from torch import Tensor, nn
 
 from mtl.models.sfp import SimpleFeaturePyramid
 
-IJEPA_MODEL = "facebook/ijepa_vith14_1k"  # I-JEPA ViT-H/14 (ImageNet-1k)
-IJEPA_PATCH = 14
-IJEPA_IMG = 518  # 14'e bölünebilir (37x37 grid), DINOv2 ile aynı çözünürlük
+# patch16 varyantı BİLEREK seçildi: DINOv1/CLIP/SAM ile AYNI grid (512 -> 32x32) verir, yani
+# grid + çözünürlük confound'u ortadan kalkar. (patch14 varyantı 518 px / 37x37 grid isterdi.)
+IJEPA_MODEL = "facebook/ijepa_vith16_1k"  # I-JEPA ViT-H/16 (ImageNet-1k)
+IJEPA_PATCH = 16
+IJEPA_IMG = 512  # 16'ya bölünür -> 32x32 grid = DINOv1/CLIP/SAM ile birebir aynı
 OUT_CHANNELS = 256
 
 

@@ -1,19 +1,21 @@
-# I-JEPA omurgalı tam koşu - predictive-SSL paradigma temsilcisi (ROADMAP Faz 1, opsiyonel).
-# Gövde: I-JEPA ViT-H/14 (HuggingFace transformers, facebook/ijepa_vith14_1k) + Simple Feature
-# Pyramid (src/mtl/models/ijepa_backbone.py). patch14 -> img_size 518 (DINOv2 gibi, 37x37 grid).
+# I-JEPA omurgalı tam koşu - predictive-SSL paradigma temsilcisi (ROADMAP Faz 1).
+# Gövde: I-JEPA ViT-H/16 (HuggingFace transformers, facebook/ijepa_vith16_1k) + Simple Feature
+# Pyramid (src/mtl/models/ijepa_backbone.py).
 #
-# ⚠️ İKİ UYARI:
-#   1. `transformers` gerekli (notebook hücresi pip install yapar).
-#   2. ViT-H (632M) -> diğerleri ViT-B; BOYUT CONFOUND'u (sonucu bu notla raporla). Ayrıca
-#      feature-cache ~80 GB (/content'e sığmayabilir) ve VRAM ağır -> batch_size 2. Sığmazsa
-#      cache yerine düz scripts/train.py veya küçük subset (n_images düşür).
+# ADİLLİK: patch16 varyantı BİLEREK seçildi -> img_size 512 -> 32x32 grid = DINOv1/CLIP/SAM ile
+# BİREBİR aynı. (patch14 varyantı 518/37x37 isterdi -> grid confound'u.) batch_size da 4:
+# cached eğitimde ViT koşmaz, VRAM'i neck+head belirler -> diğerleriyle aynı batch sığar.
+#
+# ⚠️ KALAN TEK CONFOUND: ViT-H (632M) vs diğerleri ViT-B (~86M). Meta I-JEPA'nın ViT-B'sini
+# yayınlamadı -> düzeltilemez; sonucu "boyut avantajı" notuyla raporla.
+# ⚠️ `transformers` gerekli (notebook hücresi pip install yapar). Cache ~59 GB.
 data:
   ann_file: data/coco_subset/annotations/instances_train_subset.json
   img_dir: data/coco_subset/images/train
   val_ann_file: data/coco_subset/annotations/instances_val_subset.json
   val_img_dir: data/coco_subset/images/val
   n_images: 22500
-  img_size: 518
+  img_size: 512
   num_workers: 4
 
 model:
@@ -29,9 +31,9 @@ loss:
 
 train:
   device: cuda
-  # ViT-H @518 çok ağır -> batch 2 (12 GB'de OOM olursa 1). Cached modda neck+head hafif,
-  # ama precompute (ViT-H forward) yavaş; canlı train.py daha da yavaş.
-  batch_size: 2
+  # Diğer omurgalarla AYNI (adil). Cached eğitimde ViT-H forward yok -> sığar.
+  # Precompute'ta VRAM darsa: --batch-size 1/2 (feature çıkarma, adilliği etkilemez).
+  batch_size: 4
   epochs: 16
   max_steps: null
   lr: 0.0001
