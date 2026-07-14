@@ -349,6 +349,61 @@ Mutlak sonuç yine de net: **donuk DINOv2 bu multi-task dense rejimde en güçl�
 
 ---
 
+## Deneme 9 — 2026-07-14 — 🎯 MAE donuk 16 epoch → "DONUKKEN KÖTÜ, ÇÖZÜLDÜĞÜNDE İYİ"
+
+### Kurulum
+- `configs/train_colab_mae.yaml`: `backbone=mae_vitb16` (timm `vit_base_patch16_224.mae` — **saf MAE
+  pretrain**, ImageNet supervised fine-tune YOK), donuk (layers=0), 16 epoch, batch 4, img 512.
+- **Sweep'in sıfır-confound'lu üyesi:** DINOv1 / CLIP / SAM ile **her eksende birebir aynı** — ViT-B
+  (~86M) · patch16 · 512 · **32×32 grid** · ImageNet norm (renorm YOK) · SFP · aynı head'ler · batch 4.
+  **Tek değişken: pretraining sinyali.**
+- Feature-caching akışı, fp32 (`--no-amp`). Checkpoint: `colab_mae_cached_epoch15.pt`.
+- **Neden MAE (I-JEPA değil):** Meta I-JEPA'nın **ViT-B'sini yayınlamadı** (sadece ViT-H/g) → boyut
+  confound'u düzeltilemezdi. "Maskeli tahmin" ailesini **adil temsil edebilen tek model MAE**.
+
+### Sonuç — beş omurga (hepsi donuk, 16 epoch, batch 4)
+
+| metrik | DINOv2 | ResNet | CLIP | DINOv1 | **MAE** |
+|---|---|---|---|---|---|
+| detection_mAP | **0.2300** | 0.1965 | 0.1420 | 0.1541 | **0.1336** |
+| seg_mIoU | **0.6011** | 0.3215 | 0.4398 | 0.3928 | **0.2545** |
+| cls_mAP | **0.7800** | 0.7084 | 0.6899 | 0.5565 | **0.4215** |
+| cls_F1 | **0.7239** | 0.6799 | 0.6501 | 0.5515 | **0.4181** |
+
+(COCO: AP@0.50=0.241, AP@0.75=0.127; small **0.048** / medium 0.139 / large 0.230; AR@100=0.308.)
+
+**MAE dört metrikte de SON** — ve classification'da uçurumla (0.42 vs CLIP 0.69, DINOv2 0.78).
+
+### 🎯 Bulgu — bu bir başarısızlık değil, MAE'nin BİLİNEN imzası
+MAE **maskeli pikselleri yeniden kurmayı** öğrenir. Piksel kurmak **düşük seviyeli doku/detay** ister;
+**semantik soyutlama gerektirmez** — "bu bir köpek" bilgisi olmadan da pikseller kurulabilir. Dolayısıyla
+donuk MAE feature'ları **semantik olarak organize değil** → donuk transferde zayıf.
+
+Bu literatürle **birebir** uyumlu: MAE makalesi kendi raporunda **ImageNet linear probe %68 (zayıf)**
+ama **fine-tune %83.6 (DINO'yu geçer)** verir. MAE'nin karakteri: **"donukken kötü, çözüldüğünde harika."**
+
+**Destekleyici kanıt (bizim ölçümümüzde):** MAE'nin **small-object AP'si 0.048** — ViT'lerin **en yükseği**
+(CLIP 0.031, DINOv2 0.036). Yani **düşük seviyeli/yerel detay korunmuş**; eksik olan **semantik**.
+Teori ve ölçüm örtüşüyor → bulgunun mekanizması doğrulanmış oluyor.
+
+### 🔮 Test edilebilir tahmin (Faz 2 için)
+> Backbone çözüldüğünde (LoRA / full fine-tune) **EN BÜYÜK kazancı MAE almalı**; DINOv2 en azını
+> (donukken zaten tavana yakın). **Sıralama fine-tune'da değişmeli.**
+
+Doğrulanırsa tez ciddi güçlenir: *pretraining sinyali sadece "hangi görevde iyi"yi değil,
+**"hangi adaptasyon rejiminde iyi"**yi de öngörüyor.*
+
+### ⚠️ Kapsam notu
+Protokol **donuk** → ölçtüğümüz şey **"donuk feature kalitesi"**. Bu MAE'yi sistematik dezavantaja sokar.
+Haksızlık değil (protokol herkese eşit) ama sonucun kapsamı sınırlı: **"MAE bu rejimde zayıf"** denebilir,
+**"MAE kötü bir backbone"** denemez. Faz 2 tam bunu kapatmak için var.
+
+### Sonraki adım
+- **SAM** koşusu → Faz 1'in son paradigması (seg-native).
+- **Faz 2 (adaptasyon)**: MAE tahminini test et — çözüldüğünde en çok o kazanmalı.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

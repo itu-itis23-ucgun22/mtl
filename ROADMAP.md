@@ -62,7 +62,7 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ wrapper var (sam_backbone.py); ⏳ sweep koşusu (sanity: 512 pos-embed) |
-| 5 | **Maskeli yeniden-kurma (MIM)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ wrapper var (mae_backbone.py); ⏳ koşu — **sıfır confound** |
+| 5 | **Maskeli yeniden-kurma (MIM)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ koşuldu (Deneme 9): det 0.134 / seg 0.255 / cls 0.422/0.418 — **dört metrikte SON** ("donukken kötü, çözüldüğünde iyi") |
 | (6)| Predictive SSL (latent) | ijepa_vith16 (I-JEPA ViT-H/16) | ⚠️ **ADİL DEĞİL** — sadece ViT-H var (632M vs 86M). Ana tabloya değil, **dipnota**. |
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |
 
@@ -90,8 +90,19 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
   supervised kolundaki conv/FPN-vs-ViT/SFP confound'unu da kapatır (ResNet'in yerine adil temsilci).
 
 ## Faz 2: Adaptasyon ekseni (donuk → LoRA → full) — 1-2 backbone
-Tüm backbone'larda değil; temsilcide (DINOv2 + ResNet). Test: fine-tune sıralamayı değiştiriyor
-mu / detection açığını kapatıyor mu (ViTDet: ViT detection'da fine-tune ister).
+Tüm backbone'larda değil; temsilcide. Test: fine-tune sıralamayı değiştiriyor mu / detection açığını
+kapatıyor mu (ViTDet: ViT detection'da fine-tune ister).
+
+### 🔮 Deneme 9'un ürettiği TEST EDİLEBİLİR TAHMİN (Faz 2'nin ana sorusu)
+Donuk MAE dört metrikte de sonuncu çıktı — çünkü piksel-yeniden-kurma semantik soyutlama üretmiyor
+(MAE makalesi: linear probe %68 zayıf, fine-tune %83.6 en iyi). Buradan net bir öngörü:
+> **Backbone çözüldüğünde EN BÜYÜK kazancı MAE almalı; DINOv2 en azını (donukken zaten tavana yakın).
+> Sıralama fine-tune'da DEĞİŞMELİ.**
+
+- [ ] **Faz 2 için doğru temsilci çifti: MAE + DINOv2** (spektrumun iki ucu — "donukken kötü/çözükte iyi"
+      vs "donukken zaten en iyi"). ResNet'i istersen üçüncü kontrol olarak ekle.
+- Doğrulanırsa tez güçlenir: *pretraining sinyali sadece "hangi görevde iyi"yi değil,
+  **"hangi adaptasyon rejiminde iyi"**yi de öngörüyor.*
 - [ ] LoRA implementasyonu (`trainable_blocks`'a alternatif, PEFT). **Not:** LoRA'da backbone
       çözülür → **cache KULLANILAMAZ** (trunk her adım değişir), normal `train.py` ile koş.
 - [ ] full fine-tune (`trainable_backbone_layers>0`) — VRAM'e göre.

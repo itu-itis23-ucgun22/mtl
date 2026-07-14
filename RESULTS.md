@@ -19,6 +19,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 8 | resnet50    | 0                | ~90000 | 0.1965      | 0.3215   | 0.7084  | 0.6799 | **16 epoch donuk — ADİL KIYAS (Deneme 6)**; batch 4. (results.csv layers=3 yanlış logladı; doğrusu 0) |
 | 9 | dinov2_vitb14_reg | 0          | ~90000 | 0.2300      | 0.6011   | 0.7800  | 0.7239 | **16 epoch donuk — DÖRT METRİKTE DE EN İYİ (Deneme 7)**; batch 4, img 518 (patch14) |
 | 10 | clip_vitb16 | 0                | ~90000 | 0.1420      | 0.4398   | 0.6899  | 0.6501 | **16 epoch donuk — CLIP (Deneme 8)**; batch 4, img 512 (patch16, DINOv1 ile AYNI grid); cache'li, fp32 (--no-amp). AP@0.50=0.305 |
+| 11 | mae_vitb16  | 0                | ~90000 | 0.1336      | 0.2545   | 0.4215  | 0.4181 | **16 epoch donuk — MAE (Deneme 9)**; batch 4, img 512 (patch16, aynı grid). **DÖRT METRİKTE DE SON** — donuk MAE zayıf (beklenen; bkz. bulgu). AP@0.50=0.241, small AP **0.048 (ViT'lerin en yükseği)** |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /
@@ -153,6 +154,43 @@ sinyali, hangi downstream görevde parlayacağını öngörüyor.
 > fp32 sayısal olarak daha doğru olduğundan bu CLIP'i haksız yere zayıflatmaz; nihai metrikleri anlamlı etkilemez.
 > Ayrıca CLIP kendi native normalizasyonuyla beslendi (clip_backbone.py içinde ImageNet→CLIP), her omurga
 > kendi ön-işlemesini aldığı için adil.
+
+## 🎯🎯🎯🎯 BULGU — MAE: "donukken kötü, çözüldüğünde iyi" (Deneme 9)
+
+MAE ViT-B/16 eklendi — sweep'in **sıfır confound'lu** üyesi (DINOv1/CLIP/SAM ile aynı ViT-B, patch16,
+512, 32×32 grid, ImageNet norm, SFP, batch 4, 16 epoch). **Dört metrikte de SON.**
+
+| metrik | DINOv2 | ResNet | CLIP | DINOv1 | **MAE** |
+|---|---|---|---|---|---|
+| detection_mAP | **0.2300** | 0.1965 | 0.1420 | 0.1541 | **0.1336** |
+| seg_mIoU | **0.6011** | 0.3215 | 0.4398 | 0.3928 | **0.2545** |
+| cls_mAP | **0.7800** | 0.7084 | 0.6899 | 0.5565 | **0.4215** |
+| cls_F1 | **0.7239** | 0.6799 | 0.6501 | 0.5515 | **0.4181** |
+
+**Bulgu: bu bir başarısızlık değil, MAE'nin BİLİNEN imzası.** MAE **pikselleri yeniden kurmayı**
+öğrenir; piksel kurmak **düşük seviyeli doku/detay** ister, **semantik soyutlama gerektirmez**
+("bu bir köpek" bilgisi olmadan da pikseller kurulabilir). Sonuç: donuk MAE feature'ları semantik
+olarak **organize değil** → linear-probe / donuk transferde zayıf. MAE makalesi bunu kendisi raporlar:
+**ImageNet linear probe %68 (zayıf) ama fine-tune %83.6 (DINO'yu geçer, SOTA)**. Yani MAE'nin karakteri:
+> **"donukken kötü, çözüldüğünde harika."**
+
+**Destekleyici kanıt (bizim çıktımızda):** MAE'nin **small-object AP'si 0.048** — ViT'lerin **en yükseği**
+(CLIP 0.031, DINOv2 0.036). Yani **düşük seviyeli/yerel detay korunmuş**; eksik olan **semantik**. Teori
+ve ölçüm birebir tutuyor.
+
+### 🔮 Test edilebilir tahmin (ROADMAP Faz 2)
+Bu bulgu, adaptasyon ekseni için **net bir öngörü** üretiyor:
+> **Backbone çözüldüğünde (LoRA / full fine-tune) EN BÜYÜK kazancı MAE almalı**, DINOv2 ise en azını
+> (zaten donukken tavana yakın). Sıralama fine-tune'da **değişmeli**.
+
+Bu doğrulanırsa tez çok güçlenir: *pretraining sinyali sadece "hangi görevde iyi"yi değil,
+"hangi ADAPTASYON REJİMİNDE iyi"yi de öngörüyor.*
+
+### ⚠️ Kapsam notu (dürüstlük)
+Protokolümüz **donuk**. Yani ölçtüğümüz şey **"donuk feature kalitesi"** — MAE'yi sistematik olarak
+dezavantajlı kılar. Bu **haksızlık değil** (protokol herkese eşit) ama **sonucun kapsamı sınırlı**:
+"MAE bu rejimde zayıf" diyebiliriz, **"MAE kötü bir backbone"** diyemeyiz. Faz 2 (adaptasyon) bunu
+kapatmak için var.
 
 ## Nasıl güncellenir
 - Colab'da her `scripts/eval.py` koşusu `runs/results.csv`'ye satır ekler.
