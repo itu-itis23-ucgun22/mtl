@@ -1,0 +1,45 @@
+# MAE omurgalı tam koşu - "maskeli piksel yeniden-kurma (MIM)" paradigma temsilcisi (ROADMAP Faz 1).
+# Gövde: MAE ViT-B/16 (timm vit_base_patch16_224.mae, SAF MAE pretrain - supervised fine-tune YOK)
+# + Simple Feature Pyramid (src/mtl/models/mae_backbone.py).
+#
+# ⭐ SWEEP'İN EN ADİL EKLEMESİ - DINOv1 / CLIP / SAM ile HER EKSENDE birebir aynı:
+#   ViT-B (~86M) · patch16 · img 512 · grid 32x32 · ImageNet norm (renorm yok) · SFP neck
+#   · aynı head'ler · batch 4 · 16 epoch · aynı lr/wd/seed/loss.
+#   TEK DEĞİŞKEN: pretraining sinyali. Sıfır confound.
+#
+# (I-JEPA'nın ViT-B'si Meta tarafından yayınlanmadığı için "maskeli tahmin" ailesini adil
+#  şekilde ancak MAE temsil edebiliyor; I-JEPA ViT-H boyut confound'lu -> ayrı/dipnot.)
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: mae_vitb16
+  pretrained: true
+  # 0 = ViT tamamen donuk (kanonik sweep; diğer omurgalarla aynı protokol).
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_mae
+  checkpoint_every_steps: 500

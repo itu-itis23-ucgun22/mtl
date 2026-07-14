@@ -62,18 +62,32 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ wrapper var (sam_backbone.py); ⏳ sweep koşusu (sanity: 512 pos-embed) |
-| (5)| Predictive SSL | ijepa_vith14 (I-JEPA ViT-H/14) | ✅ wrapper var (ijepa_backbone.py); ⏳ opsiyonel — ⚠️ ViT-H boyut confound + ~80GB cache |
+| 5 | **Maskeli yeniden-kurma (MIM)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ wrapper var (mae_backbone.py); ⏳ koşu — **sıfır confound** |
+| (6)| Predictive SSL (latent) | ijepa_vith16 (I-JEPA ViT-H/16) | ⚠️ **ADİL DEĞİL** — sadece ViT-H var (632M vs 86M). Ana tabloya değil, **dipnota**. |
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |
+
+### ⭐ Adil çekirdek: hepsi ViT-B/16 @512 → 32×32 grid, tek değişken PRETRAINING
+`dino_vitb16` (distillation) · `mae_vitb16` (maskeli kurma) · `clip_vitb16` (dil) · `sam_vitb16` (seg-native)
+— aynı boyut, patch, grid, norm, neck, head, batch, epoch. **Sıfır mimari confound.** Sweep'in bel kemiği bu.
+(ResNet ve DINOv2 bağlam için; ikisinin de bilinen confound'ları RESULTS.md'de notlu.)
 
 - [ ] DINOv2 sweep koşusu (cache + train_cached + eval).
 - [x] CLIP wrapper (`clip_backbone.py`, DINO desenini izler; patch16 → DINOv1 ile aynı grid;
       norm backbone içinde ImageNet→CLIP). [x] CLIP sweep koşuldu (Deneme 8): CLIP vs DINOv1 en temiz
       kıyas → dil-pretraining semantik-güçlü/lokalizasyon-zayıf; DINOv2 hâlâ dört metrikte lider.
-- [x] SAM wrapper (`sam_backbone.py`, timm samvit + paylaşılan SFP). [ ] SAM sweep koşusu (sanity: 512 pos-embed).
-- [x] I-JEPA wrapper (`ijepa_backbone.py`, HF transformers ViT-H/14 + SFP). [ ] I-JEPA koşusu (opsiyonel;
-      ⚠️ ViT-H boyut confound + ~80GB cache → sığmazsa düz train.py / küçük subset).
+- [x] SAM wrapper (`sam_backbone.py`, timm samvit + paylaşılan SFP; pretrained pos-embed/rel-pos
+      512'ye interpole edilerek yüklenir → 32×32 grid korunur). [ ] SAM sweep koşusu.
+- [x] MAE wrapper (`mae_backbone.py`, timm `vit_base_patch16_224.mae` = saf MAE, in1k-ft DEĞİL).
+      [ ] MAE sweep koşusu. **Sweep'in en temiz eklemesi** — MIM boşluğunu confound'suz doldurur.
+- [x] I-JEPA wrapper (`ijepa_backbone.py`, HF transformers). [ ] Koşu **opsiyonel** —
+      ⚠️ Meta I-JEPA'nın **ViT-B'sini yayınlamadı**, sadece ViT-H/g var → **boyut confound'u
+      düzeltilemez**. patch16@512 seçilerek grid+batch confound'ları kaldırıldı ama boyut kalıyor.
+      Koşulursa **"boyut avantajlı bonus"** olarak dipnota; ana kıyas tablosuna değil.
+      "Maskeli tahmin" ailesini adil temsil eden model **MAE**'dir.
 - Not: DINOv1/v2/v3 hepsini koşma (aynı aile, tekrar). Birini temsilci al; ilerlemeyi istersen
   küçük bir alt-çalışma olarak göster.
+- Sonraki aday (opsiyonel, aynı adil çekirdeğe uyar): **DeiT ViT-B/16** → "supervised ViT" →
+  supervised kolundaki conv/FPN-vs-ViT/SFP confound'unu da kapatır (ResNet'in yerine adil temsilci).
 
 ## Faz 2: Adaptasyon ekseni (donuk → LoRA → full) — 1-2 backbone
 Tüm backbone'larda değil; temsilcide (DINOv2 + ResNet). Test: fine-tune sıralamayı değiştiriyor

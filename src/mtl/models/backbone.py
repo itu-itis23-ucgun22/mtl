@@ -9,6 +9,8 @@ bir neck. Head'ler neck'in çıktısını tüketir, hangi neck olduğunu umursam
   - "dino_vitb16": gövde DINOv1 ViT-B/16 + neck Simple Feature Pyramid (models/dino_backbone.py).
   - "clip_vitb16": gövde CLIP ViT-B/16 (OpenAI) + neck Simple Feature Pyramid (models/clip_backbone.py;
     DINOv1 ile aynı patch16 -> aynı grid; DINOv1 baseline'ı bozmamak için ayrı dosya).
+  - "mae_vitb16": gövde MAE ViT-B/16 (maskeli piksel yeniden-kurma / MIM) + Simple Feature Pyramid
+    (models/mae_backbone.py; DINOv1/CLIP/SAM ile TAM adil: aynı ViT-B, patch16, 32x32 grid).
   - "sam_vitb16": gövde SAM image encoder (timm samvit_base_patch16) + Simple Feature Pyramid
     (models/sam_backbone.py; segmentation-native paradigma).
   - "ijepa_vith14": gövde I-JEPA ViT-H/14 (HF transformers) + Simple Feature Pyramid
@@ -65,6 +67,11 @@ def build_backbone(
 
         return ClipBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
 
+    if name in ("mae_vitb16", "mae"):
+        from mtl.models.mae_backbone import MaeBackbone
+
+        return MaeBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
+
     if name in ("sam_vitb16", "sam"):
         from mtl.models.sam_backbone import SamBackbone
 
@@ -77,6 +84,6 @@ def build_backbone(
 
     raise NotImplementedError(
         f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16', 'clip_vitb16', "
-        "'sam_vitb16', 'ijepa_vith14', "
+        "'mae_vitb16', 'sam_vitb16', 'ijepa_vith14', "
         "'dinov2_vitb14', 'dinov2_vitb14_reg', 'dinov2_vits14', 'dinov2_vits14_reg'."
     )
