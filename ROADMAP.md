@@ -61,7 +61,8 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 
 | # | Paradigma | Model | Durum |
 |---|---|---|---|
-| 1 | Supervised classification | resnet50 (ImageNet) | ✅ var (RESULTS satır 8) |
+| 1 | Supervised classification | resnet50 (ImageNet) | ✅ var (RESULTS satır 8) — conv/FPN (adil çekirdek DEĞİL, bağlam) |
+| 1b| **Supervised ViT** | **deit_vitb16 (DeiT ViT-B/16, in1k)** | ✅ wrapper var (deit_backbone.py); ⏳ koşu — supervised'ın ADİL ViT temsilcisi |
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ koşuldu (Deneme 10): det 0.150 / seg **0.193 (EN DÜŞÜK)** / cls 0.341/0.355 — "seg-native yanıltıcı: sınıf-agnostik ≠ semantik" |
@@ -70,8 +71,10 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |
 
 ### ⭐ Adil çekirdek: hepsi ViT-B/16 @512 → 32×32 grid, tek değişken PRETRAINING
-`dino_vitb16` (distillation) · `mae_vitb16` (maskeli kurma) · `clip_vitb16` (dil) · `sam_vitb16` (seg-native)
-— aynı boyut, patch, grid, norm, neck, head, batch, epoch. **Sıfır mimari confound.** Sweep'in bel kemiği bu.
+`deit_vitb16` (supervised) · `dino_vitb16` (distillation) · `mae_vitb16` (maskeli kurma) ·
+`clip_vitb16` (dil) · `sam_vitb16` (seg-native) — aynı boyut, patch, grid, norm, neck, head, batch,
+epoch. **Sıfır mimari confound.** Sweep'in bel kemiği bu. **DeiT eklenince supervised ayağı da adilleşti**
+(ResNet artık sadece "conv/FPN bağlamı"). Kilit kıyas: **DINOv1 (SSL) vs DeiT (supervised)** = aynı ViT.
 (ResNet ve DINOv2 bağlam için; ikisinin de bilinen confound'ları RESULTS.md'de notlu.)
 
 - [ ] DINOv2 sweep koşusu (cache + train_cached + eval).
