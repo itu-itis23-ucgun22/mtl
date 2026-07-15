@@ -446,6 +446,33 @@ sinyali downstream davranışı öngörüyor. Detay ve tam tablo: RESULTS.md "FA
 
 ---
 
+## Deneme 12 — 2026-07-15 — 🏆 DeiT (supervised ViT) → ADİL ÇEKİRDEK TAMAMLANDI
+
+### Kurulum
+- `configs/train_colab_deit.yaml`: `deit_vitb16` (timm `deit_base_patch16_224.fb_in1k`, SAF supervised
+  in1k — distilled DEĞİL), donuk, 16 epoch, batch 4, img 512. Diğer ViT-B'lerle her eksende aynı.
+- Amaç: "supervised" paradigmasını **adil ViT temsilcisiyle** kapatmak → ResNet'in conv/FPN confound'u kalksın.
+
+### Sonuç (donuk, 16 epoch, batch 4)
+det 0.1369 / seg 0.4271 / cls_mAP 0.6871 / cls_F1 0.6513. (AP@0.50=0.278; small 0.028 / med 0.133 / large 0.255.)
+
+### 🎯 Bulgular
+1. **DINOv1 (SSL) vs DeiT (supervised) — en temiz kıyas:** DeiT, DINOv1'i **cls'de açık ara** (0.687 vs
+   0.557) **ve seg'de** (0.427 vs 0.393) geçer; DINOv1 sadece **det'te hafif önde** (0.154 vs 0.137). →
+   Önceki "ResNet supervised cls/det'te güçlü" **conv/FPN artefaktı değilmiş**; supervised ViT de tanıma-güçlü.
+2. **DeiT ≈ CLIP** (cls ~0.69, seg ~0.43, det ~0.14): supervised ve dil, ikisi de "görüntüde ne var" için
+   optimize → aynı tanıma-güçlü/lokalizasyon-orta imza.
+3. **Ama DINOv2 hepsini geçiyor** → "supervised > SSL" DINOv1'e özgü; pretraining kalitesi (DINOv2) artınca
+   SSL öne geçiyor. Ana mesaj: paradigma değil, **kalite+tür** belirleyici.
+4. **Detection deseni:** tüm ViT-B'ler 0.13–0.15 kümesinde; yüksekler DINOv2 (ince grid) + ResNet (FPN) →
+   detection farkı büyük ölçüde grid/neck kaynaklı, Faz 3 işareti.
+
+### Adil çekirdek tamam
+Beş paradigma, hepsi ViT-B/16 @512: DeiT (supervised) · DINOv1 (SSL-distill) · MAE (MIM) · CLIP (dil) ·
+SAM (seg-native). + bağlam (ResNet, DINOv2) + dipnot (I-JEPA). Tam tablo/bulgu: RESULTS.md.
+
+---
+
 ## Deneme 11 — 2026-07-15 — 📎 I-JEPA ViT-H (DİPNOT): "boyut ≠ kalite"
 
 ### Kurulum

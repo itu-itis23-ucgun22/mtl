@@ -62,7 +62,7 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | # | Paradigma | Model | Durum |
 |---|---|---|---|
 | 1 | Supervised classification | resnet50 (ImageNet) | ✅ var (RESULTS satır 8) — conv/FPN (adil çekirdek DEĞİL, bağlam) |
-| 1b| **Supervised ViT** | **deit_vitb16 (DeiT ViT-B/16, in1k)** | ✅ wrapper var (deit_backbone.py); ⏳ koşu — supervised'ın ADİL ViT temsilcisi |
+| 1b| **Supervised ViT** | **deit_vitb16 (DeiT ViT-B/16, in1k)** | ✅ koşuldu (Deneme 12): det 0.137 / seg 0.427 / cls 0.687/0.651 — DINOv1'i (SSL) cls/seg'de geçer; ≈CLIP |
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ koşuldu (Deneme 10): det 0.150 / seg **0.193 (EN DÜŞÜK)** / cls 0.341/0.355 — "seg-native yanıltıcı: sınıf-agnostik ≠ semantik" |

@@ -22,6 +22,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 11 | mae_vitb16  | 0                | ~90000 | 0.1336      | 0.2545   | 0.4215  | 0.4181 | **16 epoch donuk — MAE (Deneme 9)**; batch 4, img 512 (patch16, aynı grid). **DÖRT METRİKTE DE SON** — donuk MAE zayıf (beklenen; bkz. bulgu). AP@0.50=0.241, small AP **0.048 (ViT'lerin en yükseği)** |
 | 12 | sam_vitb16  | 0                | ~90000 | 0.1497      | 0.1933   | 0.3410  | 0.3545 | **16 epoch donuk — SAM (Deneme 10)**; batch 4, img 512 (pos-embed/rel-pos interp; trunk 256-kanal). **SEG'DE EN DÜŞÜK** — sınıf-agnostik pretraining ≠ semantik seg (bkz. bulgu). Confound: 256-ch neck darboğazı |
 | 13 | ijepa_vith16 | 0               | ~90000 | 0.1941      | 0.4264   | 0.6149  | 0.6047 | **16 epoch donuk — I-JEPA (Deneme 11)**; ⚠️ **ViT-H (632M) → ADİL ÇEKİRDEK DEĞİL, DİPNOT** (diğerleri ViT-B ~86M). batch 4, img 512. AP@0.50=0.357, small AP 0.057. Bkz. dipnot bulgusu |
+| 14 | deit_vitb16 | 0                | ~90000 | 0.1369      | 0.4271   | 0.6871  | 0.6513 | **16 epoch donuk — DeiT (Deneme 12)**; batch 4, img 512 (patch16, aynı grid). **Supervised ViT → adil çekirdeğin supervised ayağı.** cls'de güçlü (~CLIP); DINOv1'i (SSL) cls/seg'de geçer. AP@0.50=0.278 |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /
@@ -244,6 +245,37 @@ tek başına 256-darboğaz cls'yi bu kadar düşürmezdi.
    "uzman" sinyaller dar, "genel" sinyaller (DINOv2) geniş transfer sağlıyor.
 
 **Faz 2 tahmini (Deneme 9'dan):** çözüldüğünde sıralama değişmeli — MAE en çok, DINOv2 en az kazanmalı.
+
+## 🏆 ADİL ÇEKİRDEK TAMAM — beş paradigma, hepsi ViT-B/16 @512, tek değişken PRETRAINING (Deneme 12 ile)
+
+DeiT eklendi → sweep'in **supervised ayağı da adilleşti**. Artık beş paradigma **birebir aynı mimaride**
+(ViT-B, patch16, 32×32 grid, ImageNet norm, SFP, batch 4, 16 epoch) — **tek değişken pretraining hedefi.**
+
+| metrik | DeiT (supervised) | DINOv1 (SSL-distill) | MAE (MIM) | CLIP (dil) | SAM (seg-native) |
+|---|---|---|---|---|---|
+| detection_mAP | 0.1369 | **0.1541** | 0.1336 | 0.1420 | 0.1497 |
+| seg_mIoU | 0.4271 | 0.3928 | 0.2545 | **0.4398** | 0.1933 |
+| cls_mAP | 0.6871 | 0.5565 | 0.4215 | **0.6899** | 0.3410 |
+| cls_F1 | 0.6513 | 0.5515 | 0.4181 | **0.6501** | 0.3545 |
+
+**🎯 En temiz kıyas — DINOv1 (SSL) vs DeiT (supervised), aynı ViT:**
+Supervised (DeiT), SSL-distillation'ı (DINOv1) **classification'da açık ara** (0.687 vs 0.557) **ve
+segmentasyonda** (0.427 vs 0.393) geçiyor; DINOv1 yalnızca **detection'da hafif önde** (0.154 vs 0.137).
+→ Önceki "ResNet supervised, cls/det'te güçlü" bulgusu **conv/FPN artefaktı DEĞİLmiş**: supervised ViT de
+aynı tanıma-gücünü gösteriyor. Supervised sınıflandırma-pretraining'i, donuk rejimde **tanıma görevlerine
+(cls) doğrudan transfer** oluyor.
+
+**🎯 Paradigma kümeleri:** DeiT (supervised) ≈ CLIP (dil) — ikisi de cls ~0.69, seg ~0.43, det ~0.14.
+İkisi de **"görüntüde ne var" için optimize** (biri etiketle, biri metinle) → **tanıma-güçlü/lokalizasyon-orta**
+aynı imza. Buna karşı MAE (reconstruction) ve SAM (seg-native) tanıma-zayıf (semantik yok).
+
+**⚠️ Ama DINOv2 (daha iyi SSL) hepsini geçiyor** (det 0.230 / seg 0.601 / cls 0.780). Yani "supervised >
+SSL" sonucu **DINOv1'e özgü**; pretraining KALİTESİ artınca (DINOv2) SSL her yerde öne geçiyor — tıpkı
+CLIP bölümünde dediğimiz gibi. Ana mesaj: **paradigma değil, pretraining kalitesi+türü belirleyici.**
+
+**Not (detection deseni):** Tüm ViT-B'ler detection'da düşük kümede (0.13–0.15); yüksek olanlar DINOv2
+(0.230, ince grid) ve ResNet (0.197, gerçek FPN). → Detection'daki fark büyük ölçüde **grid/neck** kaynaklı
+(pretraining'den çok) — Faz 3 head/grid ablasyonu için işaret.
 
 ## 📎 DİPNOT — I-JEPA ViT-H (Deneme 11): boyut-avantajlı, ADİL ÇEKİRDEK DIŞI
 
