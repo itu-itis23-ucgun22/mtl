@@ -63,8 +63,12 @@ class IjepaBackbone(nn.Module):
             ) from e
 
         if not pretrained:
+            # ÖNEMLİ: default IJepaConfig ViT-B'dir (768/12 katman) ama checkpoint ViT-H (1280/32).
+            # Eval/görselleştirmede ağırlık checkpoint'ten gelir; burada sadece DOĞRU MİMARİ gerek.
+            # Bu yüzden pretrained model'in config'ini al (config.json küçük, Xet-CDN'e girmez) ->
+            # ViT-H mimarisi rastgele init olarak kurulur, checkpoint state_dict'i sorunsuz oturur.
             from transformers import IJepaConfig
-            self.vit = IJepaModel(IJepaConfig())  # rastgele init (test/offline)
+            self.vit = IJepaModel(IJepaConfig.from_pretrained(IJEPA_MODEL))
         else:
             self.vit = IJepaModel.from_pretrained(IJEPA_MODEL)
 
