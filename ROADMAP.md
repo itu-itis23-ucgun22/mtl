@@ -38,11 +38,14 @@ flip'siz); DINO ailesi (`trunk_forward`'ı olanlar — ResNet donuk gövdesi zat
 **Depolama:** ViT-B trunk ~1.5-2 MB/görsel (float16) → 22.5k ≈ 35-45 GB/backbone. Bir backbone'u
 cache'le → deneylerini koş → cache'i sil → sıradakine geç. Prototip için küçük subset (n_images).
 
-## Durum (2026-07-07)
-- ✅ **İlk bulgu** (RESULTS.md): donuk ResNet vs donuk DINO, 16 epoch, batch 4 → ResNet det/cls'de,
-  **DINO seg'de** önde. "Göreve göre backbone tercihi."
-- ✅ DINOv2 backbone eklendi (`dinov2_backbone.py`), henüz koşulmadı.
-- ✅ Feature-caching altyapısı eklendi (bu dosyadaki iş akışı).
+## Durum (2026-07-15) — 🏁 FAZ 1 TAMAMLANDI
+- ✅ **Altı omurga / beş paradigma koşuldu** (hepsi donuk, 16 epoch, batch 4): ResNet, DINOv1, DINOv2,
+  CLIP, MAE, SAM. Tam tablo + bulgular: RESULTS.md "FAZ 1 ÖZET".
+- ✅ **Ana sonuç:** DINOv2 dört metrikte lider; "uzman" pretraining'ler (CLIP=dil, SAM=seg-native,
+  MAE=MIM) donuk rejimde genel SSL/supervised gerisinde ama her biri kendi ekseninde imzalı →
+  **tez doğrulandı** (pretraining sinyali downstream davranışı öngörüyor).
+- ✅ Feature-caching + yerel-ağırlık (MTL_WEIGHTS_DIR) altyapısı hazır.
+- ⏭️ **Sıradaki: Faz 2** (adaptasyon: MAE + DINOv2, donuk → LoRA → full). Tahmin: MAE en çok kazanır.
 
 ---
 
@@ -61,7 +64,7 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | 1 | Supervised classification | resnet50 (ImageNet) | ✅ var (RESULTS satır 8) |
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
-| 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ wrapper var (sam_backbone.py); ⏳ sweep koşusu (sanity: 512 pos-embed) |
+| 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ koşuldu (Deneme 10): det 0.150 / seg **0.193 (EN DÜŞÜK)** / cls 0.341/0.355 — "seg-native yanıltıcı: sınıf-agnostik ≠ semantik" |
 | 5 | **Maskeli yeniden-kurma (MIM)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ koşuldu (Deneme 9): det 0.134 / seg 0.255 / cls 0.422/0.418 — **dört metrikte SON** ("donukken kötü, çözüldüğünde iyi") |
 | (6)| Predictive SSL (latent) | ijepa_vith16 (I-JEPA ViT-H/16) | ⚠️ **ADİL DEĞİL** — sadece ViT-H var (632M vs 86M). Ana tabloya değil, **dipnota**. |
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |

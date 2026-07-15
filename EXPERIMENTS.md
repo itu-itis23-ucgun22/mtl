@@ -404,6 +404,48 @@ Haksızlık değil (protokol herkese eşit) ama sonucun kapsamı sınırlı: **"
 
 ---
 
+## Deneme 10 — 2026-07-15 — 🎯 SAM donuk 16 epoch → "SEGMENTATION-NATIVE" YANILTICI (Faz 1 bitti)
+
+### Kurulum
+- `configs/train_colab_sam.yaml`: `backbone=sam_vitb16` (timm `samvit_base_patch16.sa1b`), donuk, 16
+  epoch, batch 4, img 512. Pretrained pos-embed/rel-pos native-1024'ten 512 grid'ine interpole edilerek
+  yüklendi (sam_backbone.py) → diğer ViT'lerle aynı 32×32 grid. Trunk **256 kanal** (SAM'ın kendi neck'i).
+- Feature-caching, fp32 (`--no-amp`). Ağırlık HF Xet CDN'e Colab'dan erişilemediği için PC'den indirilip
+  Drive üzerinden `MTL_WEIGHTS_DIR` ile yerel dosyadan yüklendi (models/timm_weights.py).
+
+### Sonuç — altı omurga (hepsi donuk, 16 epoch, batch 4)
+
+| metrik | DINOv2 | ResNet | CLIP | DINOv1 | MAE | **SAM** | SAM sırası |
+|---|---|---|---|---|---|---|---|
+| detection_mAP | **0.2300** | 0.1965 | 0.1420 | 0.1541 | 0.1336 | 0.1497 | 4/6 |
+| seg_mIoU | **0.6011** | 0.3215 | 0.4398 | 0.3928 | 0.2545 | **0.1933** | **6/6** |
+| cls_mAP | **0.7800** | 0.7084 | 0.6899 | 0.5565 | 0.4215 | **0.3410** | **6/6** |
+| cls_F1 | **0.7239** | 0.6799 | 0.6501 | 0.5515 | 0.4181 | **0.3545** | **6/6** |
+
+### 🎯 Bulgu — "seg-native" model seg'de EN DÜŞÜK
+SAM prompt'a karşılık **sınıf-agnostik maske** üretir; **kategori bilgisi öğrenmez**. Bizim seg'imiz
+**semantik** (piksel→sınıf). SAM feature'ları nesnelik/sınır taşır ama **kategori semantiği taşımaz**
+→ semantik-seg + classification'da (ikisi de kategori ister) en düşük. "seg-native ⇒ seg'de iyi" sezgisi
+**çürüdü**: segmentasyonun *türü* belirleyici. (Detection'da SAM 0.150 ile MAE/CLIP üstünde — nesnelik
+kutuya biraz yarıyor, ama zayıf sınıflandırma mAP'i sınırlıyor.)
+
+### ⚠️ İki confound (ablasyon gerekli)
+1. **256-kanal darboğazı** (SAM neck 768→256) → SFP'ye dar bilgi. Ablasyon: pre-neck 768 tap.
+2. **pos-embed/rel-pos interp** (1024→512). Kontrol: native 1024 koşu (ağır).
+Mekanizma (kategori-semantiği yokluğu) seg+cls'nin BİRLİKTE düşmesini açıklıyor; 256-darboğaz tek başına
+cls'yi bu kadar düşürmezdi → bulgu ayakta ama güçlü iddia için ablasyon şart.
+
+### 🏁 Faz 1 kapandı — altı omurga / beş paradigma
+DINOv2 dört metrikte lider; "uzman" pretraining'ler (CLIP=dil, SAM=seg-native, MAE=MIM) donuk rejimde
+genel SSL/supervised'ın gerisinde ama her biri kendi ekseninde imzalı. **Tez doğrulandı:** pretraining
+sinyali downstream davranışı öngörüyor. Detay ve tam tablo: RESULTS.md "FAZ 1 ÖZET".
+
+### Sonraki adım
+- **Faz 2 (adaptasyon):** MAE + DINOv2 çifti, donuk → LoRA → full. Tahmin: MAE en çok kazanır, sıralama değişir.
+- **Faz 3 ablasyonları:** SAM pre-neck 768 tap; DINOv2 register/patch; head ekseni (FCOS/Mask2Former).
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

@@ -20,6 +20,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 9 | dinov2_vitb14_reg | 0          | ~90000 | 0.2300      | 0.6011   | 0.7800  | 0.7239 | **16 epoch donuk — DÖRT METRİKTE DE EN İYİ (Deneme 7)**; batch 4, img 518 (patch14) |
 | 10 | clip_vitb16 | 0                | ~90000 | 0.1420      | 0.4398   | 0.6899  | 0.6501 | **16 epoch donuk — CLIP (Deneme 8)**; batch 4, img 512 (patch16, DINOv1 ile AYNI grid); cache'li, fp32 (--no-amp). AP@0.50=0.305 |
 | 11 | mae_vitb16  | 0                | ~90000 | 0.1336      | 0.2545   | 0.4215  | 0.4181 | **16 epoch donuk — MAE (Deneme 9)**; batch 4, img 512 (patch16, aynı grid). **DÖRT METRİKTE DE SON** — donuk MAE zayıf (beklenen; bkz. bulgu). AP@0.50=0.241, small AP **0.048 (ViT'lerin en yükseği)** |
+| 12 | sam_vitb16  | 0                | ~90000 | 0.1497      | 0.1933   | 0.3410  | 0.3545 | **16 epoch donuk — SAM (Deneme 10)**; batch 4, img 512 (pos-embed/rel-pos interp; trunk 256-kanal). **SEG'DE EN DÜŞÜK** — sınıf-agnostik pretraining ≠ semantik seg (bkz. bulgu). Confound: 256-ch neck darboğazı |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /
@@ -191,6 +192,57 @@ Protokolümüz **donuk**. Yani ölçtüğümüz şey **"donuk feature kalitesi"*
 dezavantajlı kılar. Bu **haksızlık değil** (protokol herkese eşit) ama **sonucun kapsamı sınırlı**:
 "MAE bu rejimde zayıf" diyebiliriz, **"MAE kötü bir backbone"** diyemeyiz. Faz 2 (adaptasyon) bunu
 kapatmak için var.
+
+## 🎯🎯🎯🎯🎯 BULGU — SAM: "segmentation-native" YANILTICI (Deneme 10) — Faz 1 tamamlandı
+
+SAM ViT-B/16 (seg-native) eklendi → **Faz 1'in altı omurgası tamam**. Sürpriz sonuç: sweep'in
+"segmentation-native" temsilcisi **segmentasyonda EN DÜŞÜK** (0.193, MAE'nin 0.255'inden bile aşağı),
+ve **classification'da da en düşük**.
+
+| metrik | DINOv2 | ResNet | CLIP | DINOv1 | MAE | **SAM** | SAM sırası |
+|---|---|---|---|---|---|---|---|
+| detection_mAP | **0.2300** | 0.1965 | 0.1420 | 0.1541 | 0.1336 | 0.1497 | 4/6 |
+| seg_mIoU | **0.6011** | 0.3215 | 0.4398 | 0.3928 | 0.2545 | **0.1933** | **6/6** |
+| cls_mAP | **0.7800** | 0.7084 | 0.6899 | 0.5565 | 0.4215 | **0.3410** | **6/6** |
+| cls_F1 | **0.7239** | 0.6799 | 0.6501 | 0.5515 | 0.4181 | **0.3545** | **6/6** |
+
+**Bulgu: "segmentation-native" etiketi yanıltıcı — SAM'ın segmentasyonu bizimkiyle FARKLI bir görev.**
+SAM, prompt'a (nokta/kutu) karşılık **sınıf-agnostik maske** üretmeyi öğrenir; **kategori bilgisi hiç
+öğrenmez** ("bu bir maske" evet, "bu bir kedi" hayır). Bizim seg'imiz ise **semantik** (piksel→sınıf).
+SAM feature'ları **nesnelik/sınır** taşır ama **kategori semantiği taşımaz** → hem semantik-seg hem
+classification'da çöker (İKİSİ de kategori bilgisi ister). Bu, "seg-native ⇒ seg'de iyi" sezgisini
+**çürütür**: hangi *tür* segmentasyon olduğu belirleyici.
+
+**Not (detection ilginç):** SAM detection'da (0.150) MAE ve CLIP'in üstünde — nesnelik/sınır bilgisi
+kutu bulmaya bir miktar yarıyor; ama sınıflandırma zayıf olduğu için mAP sınırlı kalıyor.
+
+### ⚠️ İki confound (dürüstlük — güçlü sonuç çıkarmadan önce ablasyon gerek)
+SAM'ın düşüklüğünün tamamı "sınıf-agnostik pretraining"e atfedilemez; iki ek fark var:
+1. **256-kanal darboğazı:** SAM'ın kendi neck'i trunk'ı 768→256'ya sıkıştırır → SFP'ye giren bilgi
+   diğer ViT'lerden (768) **dar**. Skorun bir kısmı bundan olabilir.
+   → **Ablasyon adayı:** SAM'ın neck'inden ÖNCEki ham 768-d ViT çıktısını tap'la, tekrar koş.
+2. **pos-embed/rel-pos interpolasyonu:** native 1024 → 512'ye indirdik (adil grid için). Hafif
+   bozulma olabilir. → 1024 native koşu bir kontrol olur (ağır).
+Yine de mekanizma (kategori semantiği yokluğu) hem seg hem cls'nin **birlikte** düşmesini açıklıyor;
+tek başına 256-darboğaz cls'yi bu kadar düşürmezdi.
+
+## 🏁 FAZ 1 ÖZET — altı omurga, beş paradigma (hepsi donuk, 16 epoch, batch 4)
+
+**Adil çekirdek (ViT-B/16 @512, 32×32 grid, tek değişken pretraining):** DINOv1 · MAE · CLIP · SAM.
+**Bağlam:** ResNet (supervised, conv/FPN), DINOv2 (patch14/518, en güçlü SSL).
+
+**Ana sonuçlar:**
+1. **DINOv2 dört metrikte de lider** — güçlü genel-amaçlı SSL her yerde kazanıyor.
+2. **"Uzman" pretraining'ler donuk rejimde zayıf:** dil (CLIP), seg-native (SAM), reconstruction (MAE)
+   — her biri kendi amacına göre bir eksende iyi ama genel donuk-transferde genel SSL/supervised'ın gerisinde.
+3. **Her uzmanın imzası görevle örtüşüyor:**
+   - **CLIP** (dil): semantik güçlü (cls/seg iyi), **lokalizasyon zayıf** (det en düşüklerden).
+   - **MAE** (reconstruction): **donukken kötü** (semantik yok), düşük-seviye detay güçlü (small-obj en yüksek).
+   - **SAM** (seg-native): **kategori semantiği yok** → semantik-seg + cls en düşük; nesnelik det'e biraz yarıyor.
+4. **Tez doğrulandı:** pretraining sinyali, hangi downstream görevde parlayacağını **öngörüyor** — ve
+   "uzman" sinyaller dar, "genel" sinyaller (DINOv2) geniş transfer sağlıyor.
+
+**Faz 2 tahmini (Deneme 9'dan):** çözüldüğünde sıralama değişmeli — MAE en çok, DINOv2 en az kazanmalı.
 
 ## Nasıl güncellenir
 - Colab'da her `scripts/eval.py` koşusu `runs/results.csv`'ye satır ekler.
