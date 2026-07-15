@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import random
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from pycocotools.coco import COCO
 
@@ -21,6 +21,7 @@ def build_coco_subset_index(
     seed: int = 42,
     max_instances_per_image: int = 40,
     min_images_per_category: int = 20,
+    exclude_ids: Optional[Iterable[int]] = None,
 ) -> int:
     """Sample ~n_images images (all 80 categories kept) with at least one
     annotation and at most max_instances_per_image annotations, biased to
@@ -33,8 +34,13 @@ def build_coco_subset_index(
     coco = COCO(ann_file)
     cat_ids = sorted(coco.getCatIds())
 
+    # exclude_ids: bu görüntüleri havuzdan çıkar (ör. val subset'ini test'ten hariç tut -> ayrık setler)
+    excluded = set(exclude_ids) if exclude_ids is not None else set()
+
     candidate_ids = set()
     for img_id in coco.getImgIds():
+        if img_id in excluded:
+            continue
         n_ann = len(coco.getAnnIds(imgIds=img_id))
         if 0 < n_ann <= max_instances_per_image:
             candidate_ids.add(img_id)

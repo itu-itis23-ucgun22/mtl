@@ -45,14 +45,23 @@ def main() -> None:
         "--results-csv", default="runs/results.csv",
         help="toplu karşılaştırma CSV'si (varsayılan runs/results.csv)",
     )
+    parser.add_argument(
+        "--ann-file", default=None,
+        help="değerlendirilecek split'in JSON'ı; verilmezse config'in val'i. TEST için: "
+             "--ann-file data/coco_subset/annotations/instances_test_subset.json",
+    )
+    parser.add_argument("--img-dir", default=None, help="--ann-file ile eşleşen görüntü klasörü (test için)")
+    parser.add_argument("--split-name", default=None, help="results.csv'ye yazılacak etiket (ör. 'test')")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     device = resolve_device(cfg.train.device)
 
+    ann_file = args.ann_file or cfg.data.val_ann_file
+    img_dir = args.img_dir or cfg.data.val_img_dir
     dataset = CocoMultiTaskDataset(
-        ann_file=cfg.data.val_ann_file,
-        img_dir=cfg.data.val_img_dir,
+        ann_file=ann_file,
+        img_dir=img_dir,
         img_size=cfg.data.img_size,
         train=False,
     )
@@ -79,10 +88,11 @@ def main() -> None:
     append_result(
         args.results_csv,
         {
-            "run_name": cfg.train.run_name,
+            "run_name": cfg.train.run_name + (f"_{args.split_name}" if args.split_name else ""),
             "backbone": cfg.model.backbone_name,
             "trainable_layers": cfg.model.trainable_backbone_layers,
             "checkpoint": args.checkpoint,
+            "split": args.split_name or ("test" if args.ann_file else "val"),
             "step": step,  # checkpoint'e kaydedilen adım/epoch (checkpoint.py)
             **metrics,
         },
