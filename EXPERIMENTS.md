@@ -446,6 +446,32 @@ sinyali downstream davranışı öngörüyor. Detay ve tam tablo: RESULTS.md "FA
 
 ---
 
+## Deneme 11 — 2026-07-15 — 📎 I-JEPA ViT-H (DİPNOT): "boyut ≠ kalite"
+
+### Kurulum
+- `configs/train_colab_ijepa.yaml`: `ijepa_vith16` (HF transformers), donuk, 16 epoch, batch 4, img 512.
+- ⚠️ **ViT-H (632M)** — Meta ViT-B yayınlamadı → **boyut confound'u düzeltilemez** → ana kıyasa değil,
+  **DİPNOT**. patch16@512 seçilerek grid+batch confound'ları kaldırıldı; boyut kaldı.
+- Bug düzeltmesi: eval `pretrained=False`'ta default (ViT-B) config kuruyordu → `IJepaConfig.from_pretrained`
+  ile ViT-H mimarisi kurulur hale getirildi (ijepa_backbone.py).
+
+### Sonuç (donuk, 16 epoch, batch 4)
+det 0.1941 / seg 0.4264 / cls_mAP 0.6149 / cls_F1 0.6047. (AP@0.50=0.357; small 0.057 / med 0.203 / large 0.335.)
+
+### 🎯 İki bulgu (boyut confound'una rağmen anlamlı)
+1. **7× büyük olmasına RAĞMEN I-JEPA DINOv2'yi (ViT-B) dört metrikte de geçemiyor.** → "büyük model ≠
+   iyi feature"; **pretraining kalitesi ham boyutu yeniyor.** Confound'un *aleyhine* kanıt: ölçek her şey
+   olsaydı ViT-H lider olurdu, olmadı.
+2. **I-JEPA >> MAE her metrikte** (seg 0.43 vs 0.26; cls 0.61 vs 0.42). Maskeli-tahmin ailesinde **latent
+   tahmin (I-JEPA) piksel-kurmayı (MAE) geçiyor** — I-JEPA'nın ana iddiası. ⚠️ boyut confound'lu, yön
+   tutarlı ama kesin değil.
+
+### Faz 1 + dipnot kapandı
+Yedi omurga (ResNet, DINOv1, DINOv2, CLIP, MAE, SAM adil/bağlam + I-JEPA dipnot). DINOv2 her yerde lider;
+en büyük+predictive model bile onu geçemedi. Detay: RESULTS.md.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

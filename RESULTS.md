@@ -21,6 +21,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 10 | clip_vitb16 | 0                | ~90000 | 0.1420      | 0.4398   | 0.6899  | 0.6501 | **16 epoch donuk — CLIP (Deneme 8)**; batch 4, img 512 (patch16, DINOv1 ile AYNI grid); cache'li, fp32 (--no-amp). AP@0.50=0.305 |
 | 11 | mae_vitb16  | 0                | ~90000 | 0.1336      | 0.2545   | 0.4215  | 0.4181 | **16 epoch donuk — MAE (Deneme 9)**; batch 4, img 512 (patch16, aynı grid). **DÖRT METRİKTE DE SON** — donuk MAE zayıf (beklenen; bkz. bulgu). AP@0.50=0.241, small AP **0.048 (ViT'lerin en yükseği)** |
 | 12 | sam_vitb16  | 0                | ~90000 | 0.1497      | 0.1933   | 0.3410  | 0.3545 | **16 epoch donuk — SAM (Deneme 10)**; batch 4, img 512 (pos-embed/rel-pos interp; trunk 256-kanal). **SEG'DE EN DÜŞÜK** — sınıf-agnostik pretraining ≠ semantik seg (bkz. bulgu). Confound: 256-ch neck darboğazı |
+| 13 | ijepa_vith16 | 0               | ~90000 | 0.1941      | 0.4264   | 0.6149  | 0.6047 | **16 epoch donuk — I-JEPA (Deneme 11)**; ⚠️ **ViT-H (632M) → ADİL ÇEKİRDEK DEĞİL, DİPNOT** (diğerleri ViT-B ~86M). batch 4, img 512. AP@0.50=0.357, small AP 0.057. Bkz. dipnot bulgusu |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /
@@ -243,6 +244,26 @@ tek başına 256-darboğaz cls'yi bu kadar düşürmezdi.
    "uzman" sinyaller dar, "genel" sinyaller (DINOv2) geniş transfer sağlıyor.
 
 **Faz 2 tahmini (Deneme 9'dan):** çözüldüğünde sıralama değişmeli — MAE en çok, DINOv2 en az kazanmalı.
+
+## 📎 DİPNOT — I-JEPA ViT-H (Deneme 11): boyut-avantajlı, ADİL ÇEKİRDEK DIŞI
+
+I-JEPA (predictive/latent SSL) eklendi ama **ViT-H (632M)** — Meta ViT-B yayınlamadığı için (bkz. Faz 1
+notu). 7× boyut confound'u düzeltilemez → **ana kıyasa değil, dipnota.** Sonuç (donuk, 16ep, batch 4):
+det 0.194 / seg 0.426 / cls_mAP 0.615 / cls_F1 0.605.
+
+**İki bulgu (boyut confound'una rağmen anlamlı):**
+1. **7× büyük olmasına RAĞMEN I-JEPA, DINOv2'yi (ViT-B) dört metrikte de geçemiyor** (det 0.194<0.230,
+   seg 0.426<0.601, cls 0.615<0.780). → **"Büyük model ≠ iyi feature"; pretraining kalitesi (DINOv2)
+   ham boyutu yeniyor.** Bu, confound'un *aleyhine* güçlü bir kanıt: en büyük modelimiz bile en iyi
+   ViT-B'yi geçemedi. Ölçek her şey olsaydı I-JEPA lider olurdu; olmadı.
+2. **I-JEPA >> MAE her metrikte** (seg 0.426 vs 0.255; cls 0.615 vs 0.422). Aynı "maskeli tahmin"
+   ailesinde **latent-uzayda tahmin (I-JEPA) piksel yeniden-kurmayı (MAE) açık ara geçiyor** — I-JEPA
+   makalesinin ana iddiası ("pikselleri değil, temsilleri tahmin et"). ⚠️ **Ama boyut confound'lu**
+   (ViT-H vs ViT-B) → temiz atfedilemez; yön I-JEPA'nın iddiasıyla tutarlı, kesin kanıt değil.
+
+**Konum:** I-JEPA det/seg'de güçlü (üst-orta), cls'de orta. Genel: DINOv2 < I-JEPA değil — yani en
+büyük+predictive-SSL bile genel-amaçlı iyi SSL'in (DINOv2) gerisinde. Raporda **"boyut-kontrollü değil"**
+etiketiyle sun.
 
 ## Nasıl güncellenir
 - Colab'da her `scripts/eval.py` koşusu `runs/results.csv`'ye satır ekler.

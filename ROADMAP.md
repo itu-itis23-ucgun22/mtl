@@ -67,7 +67,7 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ koşuldu (Deneme 10): det 0.150 / seg **0.193 (EN DÜŞÜK)** / cls 0.341/0.355 — "seg-native yanıltıcı: sınıf-agnostik ≠ semantik" |
 | 5 | **Maskeli yeniden-kurma (MIM)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ koşuldu (Deneme 9): det 0.134 / seg 0.255 / cls 0.422/0.418 — **dört metrikte SON** ("donukken kötü, çözüldüğünde iyi") |
-| (6)| Predictive SSL (latent) | ijepa_vith16 (I-JEPA ViT-H/16) | ⚠️ **ADİL DEĞİL** — sadece ViT-H var (632M vs 86M). Ana tabloya değil, **dipnota**. |
+| (6)| Predictive SSL (latent) | ijepa_vith16 (I-JEPA ViT-H/16) | ✅ koşuldu (Deneme 11, DİPNOT): det 0.194 / seg 0.426 / cls 0.615/0.605. ⚠️ ViT-H → boyut confound; DINOv2'yi geçemedi (boyut≠kalite), I-JEPA>>MAE |
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |
 
 ### ⭐ Adil çekirdek: hepsi ViT-B/16 @512 → 32×32 grid, tek değişken PRETRAINING
