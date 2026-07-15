@@ -108,8 +108,10 @@ def main() -> None:
     p.add_argument("--config", nargs="+", required=True, help="bir veya çok config (backbone başına)")
     p.add_argument("--checkpoint", nargs="+", required=True, help="config'lerle AYNI sırada checkpoint")
     p.add_argument("--num-images", type=int, default=6)
-    p.add_argument("--indices", type=int, nargs="+", default=None, help="belirli val indeksleri (yoksa ilk N)")
+    p.add_argument("--indices", type=int, nargs="+", default=None, help="belirli indeksler (yoksa ilk N)")
     p.add_argument("--score-thresh", type=float, default=0.3, help="kutu çizim eşiği")
+    p.add_argument("--ann-file", default=None, help="split JSON (yoksa config'in val'i). TEST için test_subset.json")
+    p.add_argument("--img-dir", default=None, help="--ann-file ile eşleşen görüntü klasörü")
     p.add_argument("--out-dir", default="viz")
     args = p.parse_args()
 
@@ -124,8 +126,9 @@ def main() -> None:
     entries = []
     for cfg_path, ckpt in zip(args.config, args.checkpoint):
         cfg = load_config(cfg_path)
-        ds = CocoMultiTaskDataset(cfg.data.val_ann_file, cfg.data.val_img_dir,
-                                  img_size=cfg.data.img_size, train=False)
+        ann = args.ann_file or cfg.data.val_ann_file  # test için --ann-file ver
+        img_dir = args.img_dir or cfg.data.val_img_dir
+        ds = CocoMultiTaskDataset(ann, img_dir, img_size=cfg.data.img_size, train=False)
         model = build_model(cfg, ckpt, ds, device)
         entries.append((cfg.model.backbone_name, ds, model))
         print(f"yüklendi: {cfg.model.backbone_name}  <- {ckpt}")
