@@ -99,6 +99,11 @@ class BeitBackbone(nn.Module):
         """BEiT patch token'larını (B, C, h, w) grid'e çevirir (CLS token index 0 atılır)."""
         out = self.vit(pixel_values=images, interpolate_pos_encoding=True)
         tokens = out.last_hidden_state  # (B, 1+N, C) - BEiT'te CLS index 0
+        # BEiT'in final LayerNorm'u use_mean_pooling=True config'inde pooler'a taşınır; biz pooler'ı
+        # (add_pooling_layer=False) kapattığımız için last_hidden_state NORMALİZE EDİLMEMİŞ döner
+        # -> devasa aktivasyonlar (std~19, aralık ±500) sıfırdan neck/head öğrenmesini bozar. Diğer
+        # ViT'ler kendi final norm'unu içerir; burada parametresiz LayerNorm ile ölçeği düzeltiyoruz.
+        tokens = torch.nn.functional.layer_norm(tokens, (tokens.shape[-1],))
         b, n, c = tokens.shape
         h = w = self._img_size // BEIT_PATCH
         # CLS + olası ekstra prefix'i at: sondan h*w patch token'ı al
