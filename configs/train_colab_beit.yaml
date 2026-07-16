@@ -1,0 +1,45 @@
+# BEiT omurgalı tam koşu - "masked discrete-token" SSL paradigma temsilcisi (ROADMAP Faz 1).
+# Gövde: BEiT ViT-B/16 (HF microsoft/beit-base-patch16-224-pt22k, SAF SSL - fine-tune DEĞİL)
+# + Simple Feature Pyramid (src/mtl/models/beit_backbone.py).
+#
+# "Maskeli tahminde NE tahmin edilir" ekseni: piksel (MAE) · DISCRETE TOKEN (BEiT) · latent (I-JEPA).
+# patch16 -> img 512 -> 32x32 grid (diğer ViT-B'lerle aynı).
+#
+# ⚠️ İKİ UYARI:
+#   1. `transformers` gerekir (notebook hücresi kurar). `pt22k` = ImageNet-22k SSL -> diğerleri IN1k,
+#      hafif VERİ confound'u (raporda not düş).
+#   2. BEiT relative-position-bias -> 512'de interpolasyon gerekir; ilk koşuda trunk şekli (768,32,32)
+#      çıkmalı. Hata olursa: pip install -U transformers (interpolate_pos_encoding desteği için).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: beit_vitb16
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_beit
+  checkpoint_every_steps: 500

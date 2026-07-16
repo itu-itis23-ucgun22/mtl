@@ -1,0 +1,40 @@
+# MoCo v3 omurgalı tam koşu - "contrastive SSL" paradigma temsilcisi (ROADMAP Faz 1).
+# Gövde: MoCo v3 ViT-B/16 (timm vit_base_patch16_224 + HF nyu-visionx/moco-v3-vit-b ağırlıkları)
+# + Simple Feature Pyramid (src/mtl/models/moco_backbone.py).
+#
+# ⭐ SSL ALT-TAKSONOMİSİNİ TAMAMLAR (hepsi adil, ViT-B/16 @512, 32x32):
+#   self-distillation (DINO) · CONTRASTIVE (MoCo v3) · masked-pixel (MAE) · masked-latent (I-JEPA)
+#   DINOv1/DeiT/MAE/CLIP/SAM ile her eksende aynı; tek fark pretraining hedefi (contrastive InfoNCE).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: moco_vitb16
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_moco
+  checkpoint_every_steps: 500

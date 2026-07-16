@@ -80,6 +80,16 @@ def build_backbone(
 
         return DeitBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
 
+    if name in ("moco_vitb16", "moco", "mocov3"):
+        from mtl.models.moco_backbone import MocoBackbone
+
+        return MocoBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
+
+    if name in ("beit_vitb16", "beit"):
+        from mtl.models.beit_backbone import BeitBackbone
+
+        return BeitBackbone(pretrained=pretrained, trainable_blocks=trainable_layers)
+
     if name in ("sam_vitb16", "sam"):
         from mtl.models.sam_backbone import SamBackbone
 
@@ -92,6 +102,6 @@ def build_backbone(
 
     raise NotImplementedError(
         f"Unknown backbone '{name}'. Supported: 'resnet50', 'dino_vitb16', 'clip_vitb16', "
-        "'mae_vitb16', 'deit_vitb16', 'sam_vitb16', 'ijepa_vith14', "
+        "'mae_vitb16', 'deit_vitb16', 'moco_vitb16', 'beit_vitb16', 'sam_vitb16', 'ijepa_vith14', "
         "'dinov2_vitb14', 'dinov2_vitb14_reg', 'dinov2_vits14', 'dinov2_vits14_reg'."
     )

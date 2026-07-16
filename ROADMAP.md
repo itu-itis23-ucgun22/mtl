@@ -66,16 +66,23 @@ Sabit protokol altında her foundation model. Paradigma temsilcileri:
 | 2 | SSL distillation | dinov2_vitb14_reg | ⏳ sıradaki |
 | 3 | Image-text (dil) | clip_vitb16 (CLIP ViT-B/16, OpenAI) | ✅ koşuldu (Deneme 8): det 0.142 / seg 0.440 / cls 0.690/0.650 |
 | 4 | Segmentation-native | sam_vitb16 (SAM image encoder) | ✅ koşuldu (Deneme 10): det 0.150 / seg **0.193 (EN DÜŞÜK)** / cls 0.341/0.355 — "seg-native yanıltıcı: sınıf-agnostik ≠ semantik" |
-| 5 | **Maskeli yeniden-kurma (MIM)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ koşuldu (Deneme 9): det 0.134 / seg 0.255 / cls 0.422/0.418 — **dört metrikte SON** ("donukken kötü, çözüldüğünde iyi") |
+| 5 | **Maskeli yeniden-kurma (MIM/piksel)** | **mae_vitb16 (MAE ViT-B/16)** | ✅ koşuldu (Deneme 9): det 0.134 / seg 0.255 / cls 0.422/0.418 — **dört metrikte SON** ("donukken kötü, çözüldüğünde iyi") |
+| 7 | **Contrastive SSL** | **moco_vitb16 (MoCo v3 ViT-B/16)** | ✅ wrapper var (moco_backbone.py; nyu-visionx/moco-v3-vit-b); ⏳ koşu — SSL alt-taksonomisini kapatır |
+| 8 | **Masked discrete-token SSL** | **beit_vitb16 (BEiT ViT-B/16)** | ✅ wrapper var (beit_backbone.py; HF pt22k, saf-SSL); ⏳ koşu — ⚠️ IN22k veri + rel-pos sanity |
 | (6)| Predictive SSL (latent) | ijepa_vith16 (I-JEPA ViT-H/16) | ✅ koşuldu (Deneme 11, DİPNOT): det 0.194 / seg 0.426 / cls 0.615/0.605. ⚠️ ViT-H → boyut confound; DINOv2'yi geçemedi (boyut≠kalite), I-JEPA>>MAE |
 | (-)| SSL distillation v1 | dino_vitb16 | ✅ var (baseline) |
 
 ### ⭐ Adil çekirdek: hepsi ViT-B/16 @512 → 32×32 grid, tek değişken PRETRAINING
-`deit_vitb16` (supervised) · `dino_vitb16` (distillation) · `mae_vitb16` (maskeli kurma) ·
-`clip_vitb16` (dil) · `sam_vitb16` (seg-native) — aynı boyut, patch, grid, norm, neck, head, batch,
-epoch. **Sıfır mimari confound.** Sweep'in bel kemiği bu. **DeiT eklenince supervised ayağı da adilleşti**
-(ResNet artık sadece "conv/FPN bağlamı"). Kilit kıyas: **DINOv1 (SSL) vs DeiT (supervised)** = aynı ViT.
-(ResNet ve DINOv2 bağlam için; ikisinin de bilinen confound'ları RESULTS.md'de notlu.)
+`deit_vitb16` (supervised) · `dino_vitb16` (distillation-SSL) · `moco_vitb16` (contrastive-SSL) ·
+`mae_vitb16` (masked-pixel SSL) · `beit_vitb16` (masked-token SSL) · `clip_vitb16` (dil) ·
+`sam_vitb16` (seg-native) — aynı boyut, patch, grid, norm, neck, head, batch, epoch. **Sıfır mimari
+confound.** Sweep'in bel kemiği bu.
+
+**SSL alt-taksonomisi (MoCo+BEiT ile tamamlandı):** self-distillation (DINO) · contrastive (MoCo v3) ·
+masked-pixel (MAE) · masked-token (BEiT) · masked-latent (I-JEPA, ama ViT-H dipnot). "SSL nasıl eğitildi"
+ekseni artık dört adil ViT-B/16 temsilcisiyle gezilebiliyor. **DeiT** eklenince supervised ayağı da adilleşti.
+Kilit kıyaslar: **DINOv1 vs DeiT** (SSL vs supervised) · **DINO/MoCo/MAE/BEiT** (SSL türleri kendi içinde).
+(ResNet ve DINOv2 bağlam için; confound'ları RESULTS.md'de notlu; BEiT'te hafif IN22k veri confound'u.)
 
 - [ ] DINOv2 sweep koşusu (cache + train_cached + eval).
 - [x] CLIP wrapper (`clip_backbone.py`, DINO desenini izler; patch16 → DINOv1 ile aynı grid;
