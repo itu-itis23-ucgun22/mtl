@@ -19,6 +19,7 @@ Normalizasyon ImageNet (renorm gerekmez). patch16 -> 512 = 32x32 grid (diğer Vi
 """
 from __future__ import annotations
 
+import os
 from typing import Dict
 
 import torch
@@ -27,9 +28,22 @@ from torch import Tensor, nn
 from mtl.models.sfp import SimpleFeaturePyramid
 
 BEIT_HF = "microsoft/beit-base-patch16-224-pt22k"  # SAF SSL (pretrain-only, ft DEĞİL)
+BEIT_LOCAL = "beit-base-patch16-224-pt22k"  # MTL_WEIGHTS_DIR içindeki YEREL KLASÖR adı (opsiyonel)
 BEIT_PATCH = 16
 BEIT_IMG = 512
 OUT_CHANNELS = 256
+
+
+def _beit_source() -> tuple[str, bool]:
+    """(model_kaynağı, yerel_mi) döndürür. MTL_WEIGHTS_DIR/beit-.../ klasörü varsa Colab'ın
+    Xet-CDN indirmesine hiç girmeden ORADAN yüklenir; yoksa HF hub adına düşülür."""
+    weights_dir = os.environ.get("MTL_WEIGHTS_DIR")
+    if weights_dir:
+        local = os.path.join(weights_dir, BEIT_LOCAL)
+        if os.path.isdir(local):
+            print(f"[beit] yerel ağırlık klasörü kullanılıyor: {local}")
+            return local, True
+    return BEIT_HF, False
 
 
 class BeitBackbone(nn.Module):
@@ -52,12 +66,19 @@ class BeitBackbone(nn.Module):
         except ImportError as e:
             raise ImportError("BEiT için `transformers` gerekli: pip install transformers") from e
 
+        source, is_local = _beit_source()
+        # Yerel klasörden yüklerken local_files_only ile HER TÜRLÜ ağ çağrısını (Xet dahil) kapat.
+        load_kwargs = dict(add_pooling_layer=False)
+        if is_local:
+            load_kwargs["local_files_only"] = True
+
         if not pretrained:
             from transformers import BeitConfig
-            # eval/görselleştirme: doğru MİMARİ (ağırlık checkpoint'ten) -> config'i pretrained'den al
-            self.vit = BeitModel(BeitConfig.from_pretrained(BEIT_HF), add_pooling_layer=False)
+            # eval/görselleştirme: doğru MİMARİ (ağırlık checkpoint'ten) -> config'i kaynaktan al
+            cfg = BeitConfig.from_pretrained(source, local_files_only=is_local)
+            self.vit = BeitModel(cfg, add_pooling_layer=False)
         else:
-            self.vit = BeitModel.from_pretrained(BEIT_HF, add_pooling_layer=False)
+            self.vit = BeitModel.from_pretrained(source, **load_kwargs)
 
         self._img_size = img_size
         for p in self.vit.parameters():
