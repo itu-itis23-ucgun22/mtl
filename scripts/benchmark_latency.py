@@ -81,7 +81,7 @@ def main() -> None:
 
     per_iter_ms = total_s / args.iters * 1000.0
     per_img_ms = per_iter_ms / args.batch
-    img_per_s = args.batch * args.iters / total_s
+    fps = 1000.0 / per_img_ms  # kare/saniye = görsel işleme hızı (1000 / görsel-başı-ms)
     peak_mb = (torch.cuda.max_memory_allocated(device) / 1e6) if is_cuda else float("nan")
     gpu = torch.cuda.get_device_name(device) if is_cuda else "cpu"
 
@@ -89,7 +89,7 @@ def main() -> None:
     print(f"  parametre     : {params_m:8.1f} M")
     print(f"  gecikme/görsel: {per_img_ms:8.2f} ms")
     print(f"  batch gecikme : {per_iter_ms:8.2f} ms")
-    print(f"  verim         : {img_per_s:8.1f} görsel/s")
+    print(f"  FPS           : {fps:8.1f} kare/s")
     if is_cuda:
         print(f"  tepe bellek   : {peak_mb:8.0f} MB   ({gpu})")
 
@@ -101,10 +101,10 @@ def main() -> None:
         if new_file:
             w.writerow(["backbone", "img_size", "batch", "params_M",
                         "latency_ms_per_img", "latency_ms_per_batch",
-                        "throughput_img_s", "peak_mem_MB", "device"])
+                        "fps", "peak_mem_MB", "device"])
         w.writerow([name, img, args.batch, f"{params_m:.2f}",
                     f"{per_img_ms:.2f}", f"{per_iter_ms:.2f}",
-                    f"{img_per_s:.1f}", f"{peak_mb:.0f}" if is_cuda else "", gpu])
+                    f"{fps:.1f}", f"{peak_mb:.0f}" if is_cuda else "", gpu])
     print(f"  -> {out} güncellendi")
 
 
