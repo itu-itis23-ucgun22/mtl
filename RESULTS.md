@@ -23,6 +23,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 12 | sam_vitb16  | 0                | ~90000 | 0.1497      | 0.1933   | 0.3410  | 0.3545 | **16 epoch donuk — SAM (Deneme 10)**; batch 4, img 512 (pos-embed/rel-pos interp; trunk 256-kanal). **SEG'DE EN DÜŞÜK** — sınıf-agnostik pretraining ≠ semantik seg (bkz. bulgu). Confound: 256-ch neck darboğazı |
 | 13 | ijepa_vith16 | 0               | ~90000 | 0.1941      | 0.4264   | 0.6149  | 0.6047 | **16 epoch donuk — I-JEPA (Deneme 11)**; ⚠️ **ViT-H (632M) → ADİL ÇEKİRDEK DEĞİL, DİPNOT** (diğerleri ViT-B ~86M). batch 4, img 512. AP@0.50=0.357, small AP 0.057. Bkz. dipnot bulgusu |
 | 14 | deit_vitb16 | 0                | ~90000 | 0.1369      | 0.4271   | 0.6871  | 0.6513 | **16 epoch donuk — DeiT (Deneme 12)**; batch 4, img 512 (patch16, aynı grid). **Supervised ViT → adil çekirdeğin supervised ayağı.** cls'de güçlü (~CLIP); DINOv1'i (SSL) cls/seg'de geçer. AP@0.50=0.278 |
+| — | beit_vitb16 | 0                | ~90000 | (geçersiz)  | (geçersiz)| (geçersiz)| (geçersiz)| **BEiT (Deneme 13) — ANA TABLOYA HENÜZ ALINMADI.** 224 ve 512'de çok düşük çıktı (seg ~0.06) ama sebep **normalizasyon uyuşmazlığı** (BEiT 0.5/0.5 ister, ImageNet-norm verdik) → renorm fix'i sonrası yeniden koşulacak. Bkz. EXPERIMENTS Deneme 13, GÜNCELLEME 2. |
 
 
 > Deneme 2 (resnet, iddia edilen layers=0, ~200? adım): det 0.0013 / seg 0.022 / cls_mAP 0.128 /

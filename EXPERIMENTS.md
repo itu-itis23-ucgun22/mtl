@@ -549,7 +549,31 @@ onu felakete çeviriyor. Kesin ayrım tek deneyde.
   kodunda başka sorun → oraya bakılır.
 
 Gerekli: küçük kod tweak'i (backbone h,w'yi girdi şeklinden hesaplasın, sabit 512 yerine) + `train_colab_beit224.yaml`.
-**BeiT şu an RESULTS.md ana tablosuna ALINMADI** — çözülene kadar "hariç / devam eden iş".
+
+### GÜNCELLEME 1 (2026-07-17) — belirleyici test: ÇÖZÜNÜRLÜK HİPOTEZİ REDDEDİLDİ
+BEiT native 224 (donuk, 16 epoch, 14×14 grid, interpolasyon YOK): **det 0.026 / seg 0.068 / cls_mAP 0.271
+/ cls_F1 0.232** — 512'yle (seg 0.061) **neredeyse aynı** → **rel-pos/çözünürlük hipotezi YANLIŞ.** 224'te
+feature'lar native (temiz) ama BEiT yine çöküyor. Suçlu çözünürlük değilmiş.
+
+### 🎯 GÜNCELLEME 2 (2026-07-17) — asıl suçlu bulundu: NORMALİZASYON UYUŞMAZLIĞI
+Terminoloji düzeltmesi (kullanıcı uyarısı): biz **linear probe YAPMIYORUZ** — donuk backbone + **eğitilebilir
+SFP neck + eğitilebilir head'ler** (FCN/RetinaNet/cls, non-linear decoder). Bu, linear probe'dan güçlü. Ve tam
+da bu, sorunu açığa çıkardı: eğitilebilir head'lerimiz **zayıf-donuk MAE'den seg 0.255** çekebiliyor ama
+**BEiT'ten sadece 0.068** → fark "biraz daha zayıf"la açıklanamayacak kadar büyük → **BEiT'e özgü GİRDİ sorunu.**
+
+**Kök neden:** HF `BeitImageProcessor` girdiyi **mean/std = [0.5, 0.5, 0.5]** ([-1,1]) ile bekler; biz dataset'te
+**tüm** backbone'lara **ImageNet norm** veriyoruz. MAE (timm) ImageNet ister → doğru; **BEiT (HF) 0.5 ister →
+yanlış besleniyor** → feature'lar sistematik kayar (geçerli görünür ama bozuk). Bu hipotez HER ŞEYİ açıklar:
+çözünürlükten bağımsız (224=512 ✓), BEiT'e özgü (✓), MAE'yle orantısız fark (✓), feature dejenere değil ama
+kötü (✓). CLIP'te bu renorm'u yapmıştık; **BEiT'te atlamışız** (docstring yanlışlıkla "ImageNet, renorm gerekmez"
+diyordu).
+
+**Fix:** `beit_backbone.py`'ye ImageNet→BEiT(0.5) renorm buffer'ları eklendi (CLIP deseni). **Doğrulama:**
+`BeitImageProcessor.from_pretrained(...).image_mean/std == [0.5]*3`. Sonra cache'i yeniden hesapla + eğit + eval.
+
+**Durum:** BEiT sonucu HÂLÂ AÇIK — 0.068 sayısı **yanlış-normalize** koşudan; RESULTS.md ana tablosuna
+**henüz alınmadı.** Renorm'lu re-run gerçek BEiT sayısını verecek. (Önceki "BEiT gerçekten en zayıf" çıkarımı
+GERİ ÇEKİLDİ — muhtemelen normalizasyon hatasıydı; üçüncü hipotez, ilk ikisi de yanlıştı.)
 
 ---
 

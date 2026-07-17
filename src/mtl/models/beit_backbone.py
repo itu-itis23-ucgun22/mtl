@@ -33,6 +33,14 @@ BEIT_PATCH = 16
 BEIT_IMG = 512
 OUT_CHANNELS = 256
 
+# BEiT (HF BeitImageProcessor) girdiyi mean/std = 0.5 ([-1,1]) ile bekler; timm ViT'ler (MAE/DeiT)
+# ImageNet norm ister. Dataset hepsine ImageNet-norm verdiği için BEiT'i kendi normuna çeviriyoruz
+# (CLIP'teki renorm ile aynı mantık) -> yoksa feature'lar sistematik kayar, donuk transfer çöker.
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+BEIT_MEAN = [0.5, 0.5, 0.5]
+BEIT_STD = [0.5, 0.5, 0.5]
+
 
 def _beit_source() -> tuple[str, bool]:
     """(model_kaynağı, yerel_mi) döndürür. MTL_WEIGHTS_DIR/beit-.../ klasörü varsa Colab'ın
@@ -88,6 +96,14 @@ class BeitBackbone(nn.Module):
                 "BEiT çözük eğitim (trainable_blocks>0) bu wrapper'da yok; donuk sweep (layers=0) kullan."
             )
 
+        # ImageNet-norm -> BEiT-norm (0.5/0.5) renorm buffer'ları (dummy forward'tan ÖNCE kurulmalı).
+        im_mean = torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1)
+        im_std = torch.tensor(IMAGENET_STD).view(1, 3, 1, 1)
+        b_mean = torch.tensor(BEIT_MEAN).view(1, 3, 1, 1)
+        b_std = torch.tensor(BEIT_STD).view(1, 3, 1, 1)
+        self.register_buffer("norm_scale", im_std / b_std)
+        self.register_buffer("norm_shift", (im_mean - b_mean) / b_std)
+
         # Trunk kanalını dummy forward ile algıla (ViT-B -> 768) -> SFP'yi ona göre kur.
         with torch.no_grad():
             feat = self._trunk_raw(torch.zeros(1, 3, img_size, img_size))
@@ -97,6 +113,7 @@ class BeitBackbone(nn.Module):
 
     def _trunk_raw(self, images: Tensor) -> Tensor:
         """BEiT patch token'larını (B, C, h, w) grid'e çevirir (CLS token index 0 atılır)."""
+        images = images * self.norm_scale + self.norm_shift  # ImageNet-norm -> BEiT-norm (0.5/0.5)
         out = self.vit(pixel_values=images, interpolate_pos_encoding=True)
         tokens = out.last_hidden_state  # (B, 1+N, C) - BEiT'te CLS index 0
         # BEiT'in final LayerNorm'u use_mean_pooling=True config'inde pooler'a taşınır; biz pooler'ı
