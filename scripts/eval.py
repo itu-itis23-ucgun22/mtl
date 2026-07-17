@@ -19,13 +19,14 @@ from mtl.datasets.collate import collate_fn
 from mtl.engine.checkpoint import load_checkpoint
 from mtl.engine.evaluate import evaluate
 from mtl.models.multitask_model import MultiTaskModel
+from mtl.utils.bench import measure_efficiency
 from mtl.utils.device import resolve_device
 from mtl.utils.results import append_result
 
 METRIC_KEYS = ["detection_mAP", "seg_mIoU", "cls_mAP", "cls_F1"]
 
 
-def print_metrics_table(metrics: dict, backbone: str, checkpoint: str) -> None:
+def print_metrics_table(metrics: dict, backbone: str, checkpoint: str, eff: dict | None = None) -> None:
     print(f"\n=== Eval: backbone={backbone}  checkpoint={checkpoint} ===")
     width = max(len(k) for k in metrics)
     for key in METRIC_KEYS:
@@ -35,6 +36,13 @@ def print_metrics_table(metrics: dict, backbone: str, checkpoint: str) -> None:
     for key, value in metrics.items():
         if key not in METRIC_KEYS:
             print(f"  {key:<{width}} : {value:.4f}")
+    if eff:
+        print(f"  --- verim (backbone, batch=1) ---")
+        print(f"  {'params_M':<{width}} : {eff['params_M']:.1f}")
+        print(f"  {'latency_ms':<{width}} : {eff['latency_ms']:.2f}")
+        print(f"  {'fps':<{width}} : {eff['fps']:.1f}")
+        if eff['peak_mem_MB'] == eff['peak_mem_MB']:  # NaN değilse (cuda)
+            print(f"  {'peak_mem_MB':<{width}} : {eff['peak_mem_MB']:.0f}")
 
 
 def main() -> None:
@@ -52,6 +60,8 @@ def main() -> None:
     )
     parser.add_argument("--img-dir", default=None, help="--ann-file ile eşleşen görüntü klasörü (test için)")
     parser.add_argument("--split-name", default=None, help="results.csv'ye yazılacak etiket (ör. 'test')")
+    parser.add_argument("--no-benchmark", action="store_true",
+                        help="verim ölçümünü (params/gecikme/fps) atla")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -84,7 +94,12 @@ def main() -> None:
 
     metrics = evaluate(model, dataset, dataloader, device)
 
-    print_metrics_table(metrics, cfg.model.backbone_name, args.checkpoint)
+    # Verim (backbone çıkarım maliyeti) — metriklerle AYNI çıktıda; kalite + maliyet birlikte.
+    eff = None
+    if not args.no_benchmark:
+        eff = measure_efficiency(model.backbone, device, img_size=cfg.data.img_size, batch=1)
+
+    print_metrics_table(metrics, cfg.model.backbone_name, args.checkpoint, eff)
     append_result(
         args.results_csv,
         {
@@ -95,6 +110,8 @@ def main() -> None:
             "split": args.split_name or ("test" if args.ann_file else "val"),
             "step": step,  # checkpoint'e kaydedilen adım/epoch (checkpoint.py)
             **metrics,
+            **({"params_M": round(eff["params_M"], 2), "latency_ms": round(eff["latency_ms"], 2),
+                "fps": round(eff["fps"], 1), "peak_mem_MB": round(eff["peak_mem_MB"], 0)} if eff else {}),
         },
     )
     print(f"\n[results] {args.results_csv}'ye eklendi.")
