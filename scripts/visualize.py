@@ -108,7 +108,9 @@ def main() -> None:
     p.add_argument("--config", nargs="+", required=True, help="bir veya çok config (backbone başına)")
     p.add_argument("--checkpoint", nargs="+", required=True, help="config'lerle AYNI sırada checkpoint")
     p.add_argument("--num-images", type=int, default=6)
-    p.add_argument("--indices", type=int, nargs="+", default=None, help="belirli indeksler (yoksa ilk N)")
+    p.add_argument("--indices", type=int, nargs="+", default=None, help="dataset POZİSYON indeksi (yoksa ilk N)")
+    p.add_argument("--image-ids", type=int, nargs="+", default=None,
+                   help="COCO image_id ile seç (pozisyon indeksi DEĞİL) — öncekiyle AYNI görseller için")
     p.add_argument("--score-thresh", type=float, default=0.3, help="kutu çizim eşiği")
     p.add_argument("--ann-file", default=None, help="split JSON (yoksa config'in val'i). TEST için test_subset.json")
     p.add_argument("--img-dir", default=None, help="--ann-file ile eşleşen görüntü klasörü")
@@ -139,7 +141,20 @@ def main() -> None:
     cat_names = [c["name"] for c in cats]
     colors = class_colors(ref_ds.num_classes)
 
-    indices = args.indices if args.indices is not None else list(range(args.num_images))
+    if args.image_ids:  # COCO image_id -> dataset pozisyon indeksi (tüm entry'ler aynı ann -> aynı sıra)
+        id_list = list(ref_ds.img_ids)
+        indices = []
+        for iid in args.image_ids:
+            if iid in id_list:
+                indices.append(id_list.index(iid))
+            else:
+                print(f"UYARI: image_id {iid} bu split'te yok, atlanıyor")
+        if not indices:
+            raise SystemExit("Verilen image_id'lerin hiçbiri split'te bulunamadı (yanlış split olabilir?).")
+    elif args.indices is not None:
+        indices = args.indices
+    else:
+        indices = list(range(args.num_images))
 
     for idx in indices:
         n_rows = 1 + len(entries)  # GT + her backbone
