@@ -1,0 +1,42 @@
+# BEiT omurgalı koşu — NATIVE 224 çözünürlük (belirleyici test, EXPERIMENTS Deneme 13).
+# Gövde: BEiT ViT-B/16 (HF microsoft/beit-base-patch16-224-pt22k, SAF SSL) + Simple Feature Pyramid.
+#
+# NEDEN 224: BEiT @512 donuk başarısız oldu (det 0.03 / seg 0.06) — muhtemelen rel-pos bias'ın
+# 224->512 EKSTRAPOLASYONU feature'ları bozuyor. 224 = BEiT'in native çözünürlüğü -> interpolasyon
+# YOK, rel-pos tablosu birebir uyuyor -> temiz feature. Bedeli: 14x14 ızgara (diğerleri 32x32) ->
+# GRID CONFOUND'u (raporda dipnot). Bu koşu "suçlu 512 mi?" sorusunu yanıtlar:
+#   224'te düzgün (~MAE civarı) gelirse -> evet, 512/rel-pos suçlu (geçerli BEiT sayısı, dipnotla).
+#   224'te de bozuksa -> sorun çözünürlük değil, başka yerde.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 224          # <-- native BEiT; 14x14 grid, interpolasyon yok
+  num_workers: 4
+
+model:
+  backbone_name: beit_vitb16
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_beit224
+  checkpoint_every_steps: 500

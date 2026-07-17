@@ -105,7 +105,10 @@ class BeitBackbone(nn.Module):
         # ViT'ler kendi final norm'unu içerir; burada parametresiz LayerNorm ile ölçeği düzeltiyoruz.
         tokens = torch.nn.functional.layer_norm(tokens, (tokens.shape[-1],))
         b, n, c = tokens.shape
-        h = w = self._img_size // BEIT_PATCH
+        # Izgara boyutunu GİRDİ şeklinden hesapla (sabit değil) -> BEiT her çözünürlükte çalışır:
+        # 512 -> 32x32 (rel-pos ekstrapolasyonu, bozuk) · 224 native -> 14x14 (interpolasyon yok, temiz).
+        h = images.shape[2] // BEIT_PATCH
+        w = images.shape[3] // BEIT_PATCH
         # CLS + olası ekstra prefix'i at: sondan h*w patch token'ı al
         patch = tokens[:, n - h * w:, :] if n != h * w else tokens
         return patch.transpose(1, 2).reshape(b, c, h, w)
