@@ -577,6 +577,28 @@ GERİ ÇEKİLDİ — muhtemelen normalizasyon hatasıydı; üçüncü hipotez, i
 
 ---
 
+## Deneme 14 — 2026-07-17 — ⚡ Verim ölçümü (FPS / gecikme / bellek, A100)
+
+`scripts/benchmark_latency.py` ile 8 backbone, **batch=1** (gerçek-zaman), **A100-SXM4-40GB**. Ölçülen:
+backbone + SFP neck ileri-geçişi. (params SFP dahil → ViT-B ~91M.) Tam tablo: RESULTS.md "Verimlilik".
+
+**FPS:** ResNet **91** · ViT-B dörtlü (DeiT/DINOv1/CLIP/MAE) **~62** · DINOv2 **45** · SAM **36** · I-JEPA(ViT-H) **9.3**.
+**Bellek:** ResNet 237 MB → I-JEPA **2729 MB (11×)**. **Param:** ViT-B ~91M → I-JEPA **642M (7×)**.
+
+**Üç bulgu:**
+1. **ViT-B @512 dörtlüsü maliyette BİREBİR AYNI** (~62 FPS, 447 MB) → **pretraining objektifi "bedava eksen"**:
+   doğruluk farkları sıfır ek maliyetle. Adil çekirdeğin maliyet-eşitliğini de kanıtlar (aynı mimari = aynı maliyet).
+2. **ResNet = verimlilik kralı** (91 FPS, 27M, 237MB) → kısıtlı platform baseline'ı olarak neden güçlü.
+3. **I-JEPA ViT-H = ölçek vergisi**: en yavaş (9.3 FPS), en çok bellek (2.7 GB), 642M — **VE doğruluk lideri
+   değil** (DINOv2 ViT-B geçiyor). "boyut≠kalite" (Deneme 11) + "boyut pahalı" birleşiyor: doğruluk↔FPS
+   grafiğinde I-JEPA sağ-altta (yavaş+vasat), DINOv2 sağ-üstte (hızlıca iyi) → motivasyona (kısıtlı platform)
+   doğrudan bağlanan en güçlü tek grafik.
+
+⚠️ Not: BEiT verimini tabloya koymadım — eğitim sonucu hâlâ açık (Deneme 13). Mimari FPS'i geçerli ama
+sonuç netleşince eklenecek.
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO

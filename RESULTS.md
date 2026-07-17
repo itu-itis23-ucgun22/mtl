@@ -31,6 +31,41 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 > satırı olarak alınmadı. Gerçek donuk-ResNet koşusu artık satır 6'dır.
 
 
+## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)
+
+Motivasyon (kısıtlı platform / uçak): en pahalı parça omurga → doğruluğun yanına **maliyet**. Ölçülen:
+`build_backbone` (backbone + SFP neck) ileri-geçişi, **tek görsel (batch=1 = gerçek-zaman)**. `params_M`
+SFP neck dahildir (~+5M → saf ViT-B ~86M yerine ~91M). Kaynak: `scripts/benchmark_latency.py`.
+
+| backbone | img | params (M) | gecikme (ms) | **FPS** | tepe bellek (MB) |
+|---|---|---|---|---|---|
+| resnet50            | 512 | **26.8** | 10.98 | **91.1** | **237** |
+| deit_vitb16         | 512 | 91.4 | 15.98 | 62.6 | 447 |
+| dino_vitb16         | 512 | 91.4 | 15.89 | 63.0 | 447 |
+| clip_vitb16         | 512 | 91.4 | 16.18 | 61.8 | 447 |
+| mae_vitb16          | 512 | 91.4 | 16.43 | 60.9 | 447 |
+| dinov2_vitb14_reg   | 518 | 92.1 | 22.03 | 45.4 | 474 |
+| sam_vitb16          | 512 | 90.1 | 27.64 | 36.2 | 560 |
+| ijepa_vith14        | 512 | **642.3** | **107.27** | **9.3** | **2729** |
+
+**Bulgular:**
+1. **ViT-B/16 @512 dörtlüsü (DeiT/DINOv1/CLIP/MAE) maliyette BİREBİR AYNI** (~62 FPS, 447 MB) — aynı mimari
+   → **pretraining "bedava eksen": aynı maliyet, en iyi transfer edeni seç.** Doğruluk farkları **sıfır ek
+   maliyetle** geliyor; adil çekirdeğin maliyet-eşitliğini de doğrular.
+2. **ResNet-50 = verimlilik kralı** (91 FPS, 27 M, 237 MB) — en hafif/hızlı → kısıtlı platformda neden hâlâ
+   güçlü baseline olduğunu açıklar.
+3. **DINOv2** küçük maliyet öder (45 FPS) — patch14@518 daha ince grid (37×37) → ama dört metrikte lider →
+   **iyi takas** (doğruluk↔maliyet tatlı noktası).
+4. **SAM** daha ağır (36 FPS, 560 MB) — vasat sonuç için pahalı.
+5. **I-JEPA ViT-H = "ölçek vergisi"**: en yavaş (9.3 FPS ≈ ResNet'in 1/10'u), 642 M param (24×), 2.7 GB
+   bellek (11×) — **VE en iyi değil** (DINOv2 ViT-B dört metrikte onu geçiyor). *"Büyük model hem yavaş, hem
+   pahalı, hem daha iyi DEĞİL"* için kesin kanıt.
+
+**Ana çıkarım (doğruluk↔maliyet):** tatlı nokta = **DINOv2** (en iyi doğruluk, makul ViT-B maliyeti);
+en ucuz = **ResNet**; anti-örnek = **I-JEPA** (en pahalı, doğruluk lideri değil). Doğruluk↔FPS grafiğinde
+DINOv2 sağ-üstte (hızlıca iyi), I-JEPA sağ-altta (yavaş+vasat).
+
+
 ## Adil kıyas: donuk ResNet vs donuk DINO (ikisi de layers=0, step 2813)
 
 Artık her iki omurga da **aynı protokolde** (tamamen donuk backbone) ve **aynı adımda** (2813 =
