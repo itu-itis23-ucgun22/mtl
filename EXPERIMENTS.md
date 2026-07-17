@@ -499,6 +499,60 @@ en büyük+predictive model bile onu geçemedi. Detay: RESULTS.md.
 
 ---
 
+## Deneme 13 — 2026-07-17 — ⚠️ BEiT donuk @512 BAŞARISIZ (açık soruşturma, ana tabloya alınmadı)
+
+### Kurulum
+- `configs/train_colab_beit.yaml`: `beit_vitb16` = HF `microsoft/beit-base-patch16-224-pt22k` (**saf SSL
+  pretrain**, fine-tune DEĞİL), donuk, 16 epoch, batch 4, img 512. Maskeleme ailesinin "masked-token" ayağı.
+- Cache'li akış (precompute → train_cached --no-amp → eval).
+
+### Sonuç (donuk, 16 epoch, batch 4) — FELAKET
+det **0.033** / seg **0.061** / cls_mAP **0.232** / cls_F1 **0.249**. Diğer tüm omurgaların 5-10× altında;
+en kötü diğer (SAM seg 0.193) bile çok üstünde. BEiT 16 epoch sonunda ≈ DINO'nun **yarım epoch**'u (Deneme 6,
+step 2813: seg 0.056 / cls 0.233) → "zayıf ön-eğitim" değil, **eğitilmemiş/bozuk seviye.**
+
+### 🔍 İki şey soruşturuldu
+
+**1. Düşen final LayerNorm → devasa aktivasyonlar (GERÇEK ama sebep DEĞİL).**
+BEiT `use_mean_pooling=True` config'inde final LayerNorm'u pooler'a taşır; biz `add_pooling_layer=False` ile
+pooler'ı kapattığımızdan `last_hidden_state` normalize edilmemiş döndü → cache feature'ları std ~19, aralık
+±500 (yükleme raporundaki `layernorm UNEXPECTED` bunun habercisiydi). Çözüm: `_trunk_raw`'da parametresiz
+`F.layer_norm` (beit_backbone.py). Cache std 1.0'a indi. **AMA yeniden eğitim BİREBİR aynı sonucu verdi
+(0.033/0.061/0.232)** → ölçek sorun değildi. Düzeltme yine de doğru (bırakıldı), ama başarısızlığı açıklamıyor.
+
+**2. Rel-pos bias ekstrapolasyonu @512 (ÖNDE GELEN HİPOTEZ, henüz kanıtlanmadı).**
+Feature'lar çökmemiş, iyi ölçekli, görselleri ayırıyor — ama transfer etmiyor → konumsal yapı bozuk olabilir.
+BEiT **absolute pos-embed KULLANMAZ**, bunun yerine **relative-position-bias** kullanır: "iki patch N adım
+uzaksa dikkate şu biası ekle" kural tablosu. 224'te (14×14) tablo yalnız **±13** adıma kadar öğrenildi; 512'de
+(32×32) patch'ler **±31** adım uzak olabilir → bu mesafeler eğitimde HİÇ görülmedi → interpolasyon aslında
+**ekstrapolasyon** (uydurma). Üstelik rel-pos **her katmanda tekrar** eklenir → hata katmanlar boyunca birikir;
+absolute pos (girişte bir kez, DINO/MAE/CLIP) gibi toparlanamaz. Bu yüzden BEiT çözünürlüğe diğerlerinden
+çok daha hassas. (Kıyas: SAM 1024→512 = küçültme/interpolasyon, güvenli yön → çalıştı; BEiT 224→512 =
+büyütme/ekstrapolasyon, tehlikeli yön → çalışmadı.)
+
+### 📄 Makale çelişkisi değil — fine-tuning farkı
+BEiT makalesi (Ek B, Tablo 6) 512²'de sonuç raporlar, AMA orada model **512'de fine-tune EDİLİR** ("intermediate
+fine-tuning ... evaluate at 384²/512²"). Fine-tune sırasında rel-pos bias **gradyan alıp 512 grid'ine uyum
+sağlar** — interpolasyon sadece başlangıç noktasıdır. Bizde backbone **donuk** → o bozuk rel-pos hiç düzeltilemez.
+Yani makale "512'de **eğitirsen** çalışır", biz "512'de **dondurursan** çalışmaz" diyoruz — çelişki yok.
+
+### ⚠️ Dürüstlük: sebep KESİN değil
+Rel-pos hipotezi güçlü ve makaleyle tutarlı ama **kanıtlanmadı**. Muhtemelen iki etki üst üste biniyor:
+(a) BEiT donuk-feature'ı zaten zayıf (MAE gibi, bilinen linear-probe zayıflığı) + (b) 512 rel-pos ekstrapolasyonu
+onu felakete çeviriyor. Kesin ayrım tek deneyde.
+
+### Sonraki adım — belirleyici test
+**BEiT'i donuk olarak native 224'te koş** (14×14 grid, interpolasyon YOK):
+- 224'te düzgün gelirse (~MAE civarı) → suçlu **kesinlikle 512/rel-pos**; grid-confound'lu ama geçerli bir
+  BEiT sayısı elde edilir (dipnotla ana tabloya girer).
+- 224'te de bozuksa → sorun çözünürlük değil; BEiT donuk-feature'ı bu görevler için genel zayıf, ya da çıkarım
+  kodunda başka sorun → oraya bakılır.
+
+Gerekli: küçük kod tweak'i (backbone h,w'yi girdi şeklinden hesaplasın, sabit 512 yerine) + `train_colab_beit224.yaml`.
+**BeiT şu an RESULTS.md ana tablosuna ALINMADI** — çözülene kadar "hariç / devam eden iş".
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO
