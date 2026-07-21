@@ -21,7 +21,7 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 | 10 | clip_vitb16 | 0                | ~90000 | 0.1420      | 0.4398   | 0.6899  | 0.6501 | **16 epoch donuk — CLIP (Deneme 8)**; batch 4, img 512 (patch16, DINOv1 ile AYNI grid); cache'li, fp32 (--no-amp). AP@0.50=0.305 |
 | 11 | mae_vitb16  | 0                | ~90000 | 0.1336      | 0.2545   | 0.4215  | 0.4181 | **16 epoch donuk — MAE (Deneme 9)**; batch 4, img 512 (patch16, aynı grid). **DÖRT METRİKTE DE SON** — donuk MAE zayıf (beklenen; bkz. bulgu). AP@0.50=0.241, small AP **0.048 (ViT'lerin en yükseği)** |
 | 12 | sam_vitb16  | 0                | ~90000 | 0.1497      | 0.1933   | 0.3410  | 0.3545 | **16 epoch donuk — SAM (Deneme 10)**; batch 4, img 512 (pos-embed/rel-pos interp; trunk 256-kanal). **SEG'DE EN DÜŞÜK** — sınıf-agnostik pretraining ≠ semantik seg (bkz. bulgu). Confound: 256-ch neck darboğazı |
-| 13 | ijepa_vith16 | 0               | ~90000 | 0.1941      | 0.4264   | 0.6149  | 0.6047 | **16 epoch donuk — I-JEPA (Deneme 11)**; ⚠️ **ViT-H (632M) → ADİL ÇEKİRDEK DEĞİL, DİPNOT** (diğerleri ViT-B ~86M). batch 4, img 512. AP@0.50=0.357, small AP 0.057. Bkz. dipnot bulgusu |
+| 13 | ijepa_vith16 | 0               | ~90000 | 0.1941      | 0.4264   | 0.6149  | 0.6047 | **16 epoch donuk — I-JEPA (Deneme 11)**; ⚠️ **ÇİFT CONFOUND → DİPNOT**: (a) ViT-H (632M vs ViT-B 86M), (b) neck sıkıştırması 1280→256=**5×** vs ViT-B 768→256=3×. batch 4, img 512. AP@0.50=0.357, small AP 0.057. Bkz. dipnot bulgusu |
 | 14 | deit_vitb16 | 0                | ~90000 | 0.1369      | 0.4271   | 0.6871  | 0.6513 | **16 epoch donuk — DeiT (Deneme 12)**; batch 4, img 512 (patch16, aynı grid). **Supervised ViT → adil çekirdeğin supervised ayağı.** cls'de güçlü (~CLIP); DINOv1'i (SSL) cls/seg'de geçer. AP@0.50=0.278 |
 | — | beit_vitb16 | 0                | ~90000 | (geçersiz)  | (geçersiz)| (geçersiz)| (geçersiz)| **BEiT (Deneme 13) — ANA TABLOYA HENÜZ ALINMADI.** 224 ve 512'de çok düşük çıktı (seg ~0.06) ama sebep **normalizasyon uyuşmazlığı** (BEiT 0.5/0.5 ister, ImageNet-norm verdik) → renorm fix'i sonrası yeniden koşulacak. Bkz. EXPERIMENTS Deneme 13, GÜNCELLEME 2. |
 
@@ -328,6 +328,16 @@ det 0.194 / seg 0.426 / cls_mAP 0.615 / cls_F1 0.605.
    ailesinde **latent-uzayda tahmin (I-JEPA) piksel yeniden-kurmayı (MAE) açık ara geçiyor** — I-JEPA
    makalesinin ana iddiası ("pikselleri değil, temsilleri tahmin et"). ⚠️ **Ama boyut confound'lu**
    (ViT-H vs ViT-B) → temiz atfedilemez; yön I-JEPA'nın iddiasıyla tutarlı, kesin kanıt değil.
+
+### ⚠️ İKİNCİ confound — sıkıştırma oranı (I-JEPA aleyhine)
+I-JEPA sadece boyutça farklı değil, **neck'te daha sert sıkışıyor:** embed_dim 1280 → SFP 256 = **5×**
+sıkıştırma; ViT-B'ler 768 → 256 = sadece **3×**. Yani I-JEPA'nın zengin 1280-dim feature'ları dar neck'te
+**daha çok boğuluyor** olabilir → I-JEPA'nın *aleyhine* bir ek confound. Bu, "boyut ≠ kalite" iddiasını
+**hafifçe zayıflatır** (I-JEPA'ya "belki geniş neck'le kazanırdı" mazereti verir). Karşı-argüman: neck 1×1
+lateral konvolüsyonu **eğitiliyor** → 1280→256 için göreve en uygun projeksiyonu öğrenir, rastgele darboğaz
+kadar kayıplı değil. **Tasarım gerilimi:** embed_dim farklıysa "neck genişliği sabit" (256) ile "sıkıştırma
+oranı sabit" birlikte tutulamaz — adil çekirdek (hepsi 768→256, 3×) temiz olduğu için **I-JEPA/SAM dipnot**.
+→ Temiz test: I-JEPA'ya geniş neck (1280→512) ya da ViT-B I-JEPA (yok). Faz 3 ablasyonu.
 
 **Konum:** I-JEPA det/seg'de güçlü (üst-orta), cls'de orta. Genel: DINOv2 < I-JEPA değil — yani en
 büyük+predictive-SSL bile genel-amaçlı iyi SSL'in (DINOv2) gerisinde. Raporda **"boyut-kontrollü değil"**

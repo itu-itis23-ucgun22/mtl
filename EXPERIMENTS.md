@@ -493,6 +493,13 @@ det 0.1941 / seg 0.4264 / cls_mAP 0.6149 / cls_F1 0.6047. (AP@0.50=0.357; small 
    tahmin (I-JEPA) piksel-kurmayı (MAE) geçiyor** — I-JEPA'nın ana iddiası. ⚠️ boyut confound'lu, yön
    tutarlı ama kesin değil.
 
+### ⚠️ ÇİFT confound (RESULTS.md dipnotunda detaylı) — I-JEPA aleyhine
+Boyutun (ViT-H) yanında **ikinci** bir confound: neck sıkıştırması. embed_dim 1280 → SFP 256 = **5×**;
+ViT-B'ler 768 → 256 = **3×** → I-JEPA daha sert sıkışıyor, zengin feature'ı dar neck'te boğulabilir. Bu
+"boyut≠kalite"yi hafifçe zayıflatır (geniş neck'le kazanabilirdi). Karşı: neck 1×1 EĞİTİLİYOR → kayıp
+sınırlı. Tasarım gerilimi: embed_dim farklıysa "neck genişliği sabit" ve "sıkıştırma oranı sabit" birlikte
+tutulamaz → adil çekirdek (hepsi 3×) temiz, I-JEPA/SAM dipnot. Temiz test: geniş neck (1280→512) / ViT-B I-JEPA.
+
 ### Faz 1 + dipnot kapandı
 Yedi omurga (ResNet, DINOv1, DINOv2, CLIP, MAE, SAM adil/bağlam + I-JEPA dipnot). DINOv2 her yerde lider;
 en büyük+predictive model bile onu geçemedi. Detay: RESULTS.md.
