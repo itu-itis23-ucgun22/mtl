@@ -71,9 +71,18 @@ def main() -> None:
         det_num_classes=dataset.num_classes,
         seg_num_classes=dataset.num_classes + 1,
         cls_num_labels=dataset.num_classes,
+        lora=cfg.model.lora,
+        lora_rank=cfg.model.lora_rank,
+        lora_alpha=cfg.model.lora_alpha,
+        lora_dropout=cfg.model.lora_dropout,
+        lora_targets=cfg.model.lora_targets,
+        lora_blocks=cfg.model.lora_blocks,
     ).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
+    # LoRA/donuk backbone'da taban parametreler requires_grad=False → optimizer yalnız
+    # eğitilebilir (LoRA + neck + head) tensörleri alsın (frozen olanlar zaten grad almaz).
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(params, lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
     logger = CsvLogger(out_dir="runs", run_name=cfg.train.run_name)
 
     start_step = 0

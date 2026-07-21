@@ -1,0 +1,52 @@
+# MAE + LoRA — Faz 2 (adaptasyon ekseni: donuk → LoRA → full).
+# Donuk MAE (train_colab_mae.yaml) ile TEK FARK: backbone artık LoRA ile uyarlanıyor.
+#
+# ⚠️ Cache YOK: LoRA trunk'ı değiştirir → precompute/train_cached GEÇERSİZ. Normal train.py:
+#     python scripts/train.py --config configs/train_colab_mae_lora.yaml
+#     python scripts/eval.py  --config configs/train_colab_mae_lora.yaml \
+#            --checkpoint checkpoints/colab_mae_lora_epoch15.pt
+#
+# 🔮 ANA TEST (Deneme 9 tahmini): MAE donukken dört metrikte SON'du (semantik yok, "donukken kötü,
+# çözüldüğünde iyi"). LoRA ile çözülünce EN BÜYÜK kazancı MAE almalı → sıralama değişmeli. Donuk
+# MAE (det 0.134/seg 0.255/cls 0.422/0.418) ile kıyasla; delta DINOv2'nin deltasından BÜYÜK çıkmalı.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512            # patch16 → 32x32 grid (donuk koşuyla aynı)
+  num_workers: 4
+
+model:
+  backbone_name: mae_vitb16
+  pretrained: true
+  trainable_backbone_layers: 0   # taban ViT DONUK; adaptasyon yalnız LoRA ile
+  lora: true
+  lora_rank: 8
+  lora_alpha: 16.0
+  lora_dropout: 0.0
+  lora_targets: "qkv,proj"       # attention (kanonik LoRA); istersen "qkv,proj,fc1,fc2"
+  lora_blocks: -1                # tüm 12 blok
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  # ⚠️ LoRA backbone aktivasyonlarını saklar → donuk rejimden ağır. 512px/batch 4 genelde 12 GB'a
+  # sığar; OOM olursa 2'ye indir. AMP açık.
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_mae_lora
+  checkpoint_every_steps: 500

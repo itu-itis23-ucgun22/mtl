@@ -126,6 +126,36 @@ Donuk MAE dört metrikte de sonuncu çıktı — çünkü piksel-yeniden-kurma s
 - [ ] **Detection head ekseni** (FCOS, anchor-free): sıralama head'e bağlı mı? (`det_head` config'i)
 - [ ] AP@0.50 vs AP@0.75 analizi: DINO detection açığı lokalizasyon mu sınıflandırma mı.
 
+### 🔬 Task-specific neck / Mixture-of-Experts (MMoE) — interference probu (Faz 3 / gelecek çalışma)
+Faz 1 bulgusu: her pretraining'in bir **görev-imzası** var (CLIP semantik, MAE düşük-seviye, SAM
+nesnelik...). Doğal soru: **tek paylaşılan neck üç görevi aynı feature'a sıkıştırıyor → task
+interference. Göreve özel neck / uzman-yönlendirme bunu azaltır mı?** Bu, yukarıdaki tek-görev
+ablasyonunun **mekanizma tarafı** — interference'ı sadece ÖLÇMEK değil, AZALTMAYI denemek.
+
+**Kanonik-uyumlu kurgu (backbone SABİT = DINOv2 donuk, tek değişken = neck yapısı):**
+- **A (baseline):** donuk trunk + **paylaşılan SFP** (mevcut mimari).
+- **B (task-specific branch):** donuk trunk + **görev başına ayrı neck** (det/seg/cls). Gating YOK,
+  yönlendirme sabit (görev kimliği). Basit; "ayrıştırmak tek başına yardım ediyor mu"yu ölçer.
+- **C (gerçek MMoE, Wg'li):** **K paylaşımlı uzman-neck + görev başına gate** (Ma et al. 2018):
+  her task `g_t = softmax(Wg_t · pool(trunk))` ile uzmanların **ağırlıklı toplamını** alır →
+  kendi head'ine. Uzmanlar paylaşımlı (ortak yapı, pozitif transfer) + gate göreve-özel
+  (interference↓). **v1:** soft gating, görüntü-başına, K=4. İşe yararsa → sparse top-k (hız) /
+  per-token (dense güç) = v2. A→B→C = gating'in katkısını izole eder.
+
+**Tezle uyum (KRİTİK):**
+- ✅ Backbone donuk kalır → protokol + **feature-caching bozulmaz** (AYNI trunk cache, precompute YOK).
+- ✅ Tek değişken = neck → confound yok; A/B/C temiz kıyas.
+- ⚠️ **Ana pretraining sweep'ine KARIŞTIRMA** — orada neck sabit kalmalı; bu ayrı bir alt-çalışma.
+- ⚠️ **Novelty mekanizmada DEĞİL** (MMoE 2018'den beri var) — özgünlük **çerçevede:** donuk
+  foundation feature üstünde MMoE'yi bir *task-interference probu* olarak kullanmak.
+- ⚠️ **Getirisi belirsiz:** donuk DINOv2 zaten tavana yakın (seg 0.60) → ölçülebilir kazanç
+  çıkmayabilir. **Negatif sonuç da geçerli bir bulgu**; beklentiyi "belki yardım etmez" diye kur.
+
+**Sıra:** BEiT re-run → **Faz 2 (LoRA) BİTTİKTEN sonra.** Faz 2 tezin merkezî devamı (keskin MAE
+tahmini); MMoE ona **dik** → önce Faz 2'yi bitir, bunu koda şimdi sokma. Kod eskizi hazır:
+`MultiTaskModel`'de `task_specific_neck` bayrağı + `TaskExpert` (SFP) × K + `TaskGate` (Wg) × 3 +
+ağırlıklı toplam. Girişilirse ~3 dosya değişir, **baseline (bayrak False) bozulmaz.**
+
 ### Geriye dönük ablasyonlar — "DINOv2 neden en iyi?" (opsiyonel, belki deneriz)
 Deneme 7: donuk DINOv2 dört metrikte de en iyi (seg 0.60 açık ara). Ama DINOv2, DINOv1'den **üç**
 şeyde farklı (RESULTS.md "Yorum nüansı"): (a) daha iyi SSL (LVD-142M), (b) patch14+518 → ince grid
@@ -144,6 +174,8 @@ Deneme 7: donuk DINOv2 dört metrikte de en iyi (seg 0.60 açık ara). Ama DINOv
 ## Parklanan (bu tezin ekseni DEĞİL — sonraki çalışma)
 - **MTL mimarileri** (Cross-Stitch, Sluice, Deep Relationship, Fully-Adaptive): soft sharing =
   backbone'un birden çok kopyası → foundation-model çağına pahalı/uyumsuz. Hard sharing'de kal.
+  (İstisna: **donuk-trunk üstünde** task-specific neck / MMoE ucuzdur — backbone kopyalanmaz,
+  yalnız neck ayrışır → bkz. Faz 3 "task-interference probu".)
 - DINOv3 / SAM2 / SAM3 gibi aynı-aile yeni sürümler: temsilci yeterli; hepsini koşma.
 
 ## Yeni foundation model eklerken (checklist)

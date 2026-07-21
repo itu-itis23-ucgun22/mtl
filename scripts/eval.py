@@ -89,6 +89,12 @@ def main() -> None:
         det_num_classes=dataset.num_classes,
         seg_num_classes=dataset.num_classes + 1,
         cls_num_labels=dataset.num_classes,
+        lora=cfg.model.lora,
+        lora_rank=cfg.model.lora_rank,
+        lora_alpha=cfg.model.lora_alpha,
+        lora_dropout=cfg.model.lora_dropout,
+        lora_targets=cfg.model.lora_targets,
+        lora_blocks=cfg.model.lora_blocks,
     ).to(device)
     step = load_checkpoint(model, optimizer=None, path=args.checkpoint, map_location=str(device))
 

@@ -38,9 +38,38 @@ class MultiTaskModel(nn.Module):
         det_num_classes: int = 80,
         seg_num_classes: int = 81,  # +1 for background
         cls_num_labels: int = 80,
+        lora: bool = False,
+        lora_rank: int = 8,
+        lora_alpha: float = 16.0,
+        lora_dropout: float = 0.0,
+        lora_targets: str = "qkv,proj",
+        lora_blocks: int = -1,
     ):
         super().__init__()
         self.backbone = build_backbone(backbone_name, pretrained, trainable_backbone_layers)
+        if lora:
+            # ViT gövdesine LoRA adaptörleri tak (taban donuk kalır). Cache KULLANILAMAZ →
+            # normal scripts/train.py ile koş (bkz. models/lora.py, ROADMAP Faz 2).
+            from mtl.models.lora import apply_lora_to_vit
+
+            if not hasattr(self.backbone, "vit"):
+                raise ValueError(
+                    f"LoRA yalnızca ViT gövdeli backbone'larda desteklenir (dino/dinov2/mae/... '.vit'); "
+                    f"'{backbone_name}' uygun değil."
+                )
+            n = apply_lora_to_vit(
+                self.backbone.vit,
+                rank=lora_rank, alpha=lora_alpha, dropout=lora_dropout,
+                targets=tuple(t.strip() for t in lora_targets.split(",") if t.strip()),
+                last_n_blocks=lora_blocks,
+            )
+            if n == 0:
+                raise ValueError(
+                    f"LoRA hiçbir Linear'a uygulanmadı (targets={lora_targets}, blocks={lora_blocks}) "
+                    f"— '{backbone_name}' gövde yapısı beklenenden farklı olabilir."
+                )
+            print(f"[lora] {n} Linear'a LoRA enjekte edildi "
+                  f"(rank={lora_rank}, alpha={lora_alpha}, targets={lora_targets}, blocks={lora_blocks})")
         self.detection_model = build_detection_model(self.backbone, det_num_classes)
         self.seg_head = SemanticSegHead(FPN_OUT_CHANNELS, seg_num_classes)
         self.cls_head = MultiLabelClsHead(FPN_OUT_CHANNELS, cls_num_labels)

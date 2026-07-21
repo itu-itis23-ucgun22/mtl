@@ -1,0 +1,53 @@
+# DINOv2 + LoRA — Faz 2 (adaptasyon ekseni: donuk → LoRA → full).
+# Donuk DINOv2 (train_colab_dinov2.yaml) ile TEK FARK: backbone artık LoRA ile uyarlanıyor
+# (taban ViT donuk, yalnız LoRA adaptörleri + neck + head'ler eğitilir).
+#
+# ⚠️ Cache YOK: LoRA trunk'ı değiştirir → precompute/train_cached GEÇERSİZ. Normal train.py:
+#     python scripts/train.py --config configs/train_colab_dinov2_lora.yaml
+#     python scripts/eval.py  --config configs/train_colab_dinov2_lora.yaml \
+#            --checkpoint checkpoints/colab_dinov2_lora_epoch15.pt
+#
+# Test edilen tahmin (Deneme 9): DINOv2 donukken zaten tavana yakın → LoRA'dan EN AZ kazancı
+# almalı (MAE ise en çok). Donuk DINOv2 (det 0.230/seg 0.601/cls 0.780/0.724) ile kıyasla.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518            # patch14: 14'e bölünebilmeli (donuk koşuyla aynı grid 37x37)
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0   # taban ViT DONUK; adaptasyon yalnız LoRA ile
+  lora: true
+  lora_rank: 8
+  lora_alpha: 16.0
+  lora_dropout: 0.0
+  lora_targets: "qkv,proj"       # attention (kanonik LoRA); istersen "qkv,proj,fc1,fc2"
+  lora_blocks: -1                # tüm 12 blok
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  # ⚠️ Donuk rejimin AKSİNE LoRA, backprop için backbone aktivasyonlarını saklar → VRAM daha
+  # yüksek. 518px'te 12 GB'da OOM olursa batch_size'ı 2'ye indir (frozen baseline batch 4'tü;
+  # küçük bir batch confound'u, delta yine anlamlı). AMP açık = yardımcı.
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_lora
+  checkpoint_every_steps: 500

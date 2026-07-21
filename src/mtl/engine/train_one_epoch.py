@@ -60,6 +60,13 @@ def train_one_epoch(
             raise RuntimeError(f"Non-finite loss at step {step}: {raw}")
 
         scaler.scale(total_loss).backward()
+        # Grad clipping: AMP fp16'da focal-loss gradyan patlaması/NaN'ına karşı (Deneme 6'da
+        # yaşandı; train_cached.py ile aynı max_norm). Clip için önce unscale (scaler kapalıysa
+        # unscale_ no-op'tur, clip yine gerçek gradyanlara uygulanır).
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(
+            [p for p in model.parameters() if p.requires_grad], max_norm=10.0
+        )
         scaler.step(optimizer)
         scaler.update() # ölçekleme katsayısını arttırıyor azaltıyor. Eğer loss çok küçükse katsayıyı arttırıyor, çok büyükse azaltıyor. Bu sayede 16 bitte kaybolan hassasiyetin önüne geçiyor.
 

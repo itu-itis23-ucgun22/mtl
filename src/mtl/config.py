@@ -30,6 +30,13 @@ class ModelConfig:
     pretrained: bool = True
     trainable_backbone_layers: int = 3
     cls_head_tap: str = "fpn_p5"  # or "backbone_body"
+    # --- LoRA (Faz 2 adaptasyon ekseni; yalnız ViT gövdeli backbone'lar) ---
+    lora: bool = False              # True: ViT gövdesine LoRA adaptörleri tak (taban donuk kalır)
+    lora_rank: int = 8
+    lora_alpha: float = 16.0
+    lora_dropout: float = 0.0
+    lora_targets: str = "qkv,proj"  # virgülle ayrık: qkv/proj/fc1/fc2 (varsayılan attention)
+    lora_blocks: int = -1           # son N transformer bloğuna uygula (-1 = tümü)
 
 
 @dataclass
