@@ -21,7 +21,9 @@ mkdir -p "$ANN" "$IMG" "$RAW"
 echo "==> 1/4  COCO annotation'ları (kaynak)"
 if [ ! -f "$RAW/annotations/instances_train2017.json" ]; then
     echo "    indiriliyor: annotations_trainval2017.zip (~250 MB)"
-    ( cd "$RAW" && curl -L -O http://images.cocodataset.org/annotations/annotations_trainval2017.zip \
+    # -4: IPv6 takılmasını önler · https: bazı ağlar düz http'yi bloklar · retry: geçici kopmalar
+    ( cd "$RAW" && curl -4 -L --retry 5 --retry-delay 3 --connect-timeout 20 \
+        -O https://images.cocodataset.org/annotations/annotations_trainval2017.zip \
       && unzip -q -o annotations_trainval2017.zip && rm -f annotations_trainval2017.zip )
 else
     echo "    zaten var, atlanıyor"
