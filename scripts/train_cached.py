@@ -64,8 +64,10 @@ def main() -> None:
     set_seed(cfg.train.seed)
     device = resolve_device(cfg.train.device)
 
+    # n_images: precompute ile AYNI kısıtlama olmalı (cache indeksleri birebir eşleşsin).
     base = CocoMultiTaskDataset(
-        cfg.data.ann_file, cfg.data.img_dir, img_size=cfg.data.img_size, train=False
+        cfg.data.ann_file, cfg.data.img_dir, img_size=cfg.data.img_size, train=False,
+        n_images=cfg.data.n_images,
     )
     feat_dir = args.features_dir or f"features/{cfg.train.run_name}/train"
     dataset = CachedFeatureDataset(feat_dir, base)

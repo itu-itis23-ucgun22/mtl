@@ -49,7 +49,12 @@ def main() -> None:
     else:
         ann, img_dir = cfg.data.val_ann_file, cfg.data.val_img_dir
     # train=False -> augmentation yok; cache tek bir (flip'siz) görüntüye karşılık gelir.
-    dataset = CocoMultiTaskDataset(ann, img_dir, img_size=cfg.data.img_size, train=False)
+    # n_images: train split'i kısıtlamak için (ör. eksik indirme -> ilk N görüntüyle çalışmak).
+    # val'de kısıtlama YOK (değerlendirme tam split üzerinde kalmalı).
+    dataset = CocoMultiTaskDataset(
+        ann, img_dir, img_size=cfg.data.img_size, train=False,
+        n_images=cfg.data.n_images if args.split == "train" else None,
+    )
 
     backbone = build_backbone(
         cfg.model.backbone_name, pretrained=cfg.model.pretrained, trainable_layers=0
