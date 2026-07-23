@@ -1,0 +1,27 @@
+# GPU'lu (CUDA) yerel kurulum — requirements-local.txt'in CPU-only olduğuna dikkat!
+# CUDA 12.1 tekerlekleri; sürücün eskiyse cu118'e çevir (aşağıdaki URL'de 121 -> 118).
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+numpy<2
+torch==2.3.1
+torchvision==0.18.1
+
+# --- çekirdek ---
+timm>=0.9.12          # ViT omurgaları (DINO/DINOv2/CLIP/MAE/DeiT/SAM/MoCo)
+pycocotools==2.0.7    # COCO metrikleri  (Windows'ta derleyici ister, bkz. SETUP.md)
+PyYAML>=6.0
+tqdm>=4.66
+scikit-learn>=1.3     # cls metrikleri (mAP/F1)
+requests>=2.31
+
+# --- HF omurgalar ---
+transformers>=4.40    # BEiT, I-JEPA
+safetensors>=0.4      # yerel ağırlık yükleme (MTL_WEIGHTS_DIR)
+
+# --- rapor / analiz ---
+matplotlib>=3.7       # scripts/visualize.py, scripts/plot_metric_curves.py
+opencv-python>=4.8    # scripts/infer_video.py, scripts/infer_video_grid.py
+pandas>=2.0           # benchmark özet tablosu
+
+# --- geliştirme ---
+pytest>=7.4
