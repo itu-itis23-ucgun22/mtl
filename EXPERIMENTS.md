@@ -606,6 +606,42 @@ sonuç netleşince eklenecek.
 
 ---
 
+## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
+
+### Kurulum
+- `configs/train_colab_mae_lora.yaml`: donuk MAE (Deneme 9) ile **TEK FARK** LoRA — taban ViT donuk,
+  yalnız LoRA adaptörleri (rank 8, alpha 16, qkv+proj, 12 blok) + neck + head eğitilir.
+- **AYNI 22.500 görüntü, aynı val, aynı lr/wd/seed/loss/aug** → donuk baseline ile birebir kıyaslanabilir,
+  **delta geçerli** (veri confound'u YOK). Cache YOK (LoRA trunk'ı değiştirir) → normal `train.py`.
+- Arkadaşın workstation'ında koşuldu (yerel kurulum: setup_local.sh + setup_data.sh).
+
+### Sonuç — donuk MAE vs MAE+LoRA (aynı veri, tek fark adaptasyon)
+
+| metrik | MAE donuk (Deneme 9) | **MAE + LoRA** | delta |
+|---|---|---|---|
+| detection_mAP | 0.1336 | **0.2394** | **+79%** |
+| seg_mIoU | 0.2545 | **0.4640** | **+82%** |
+| cls_mAP | 0.4215 | **0.6388** | +52% |
+| cls_F1 | 0.4181 | **0.6180** | +48% |
+
+(COCO: AP@0.50=0.399, AP@0.75=0.247; small 0.099 / med 0.247 / large 0.384. Verim arkadaşın GPU'sunda:
+91.8M param [+0.4M LoRA adaptörü], 50.3 FPS — A100 tablosuyla kıyaslanamaz, farklı donanım.)
+
+### 🎯 Bulgu — Deneme 9 tahmini DOĞRULANDI
+Donuk sweep'in **DÖRT METRİKTE SONuncusu** olan MAE, LoRA ile çözülünce **patladı** — det+seg %80 sıçradı.
+Dahası: **MAE-LoRA detection'da DINOv2-donuk'u (0.230) geçiyor** (0.239) → *en kötü donuk model, çözülünce
+en iyilerden birine.* MAE'nin bilinen imzası (*"linear-probe %68 zayıf, fine-tune %83.6 SOTA"*) bizim
+multi-task/donuk→LoRA ekseninde **birebir tekrarlandı.** Piksel-yeniden-kurma semantiği donukken saklıyor;
+küçük bir adaptasyon (LoRA) onu açığa çıkarıyor.
+
+### ⏳ Hikâye yarım — DINOv2-LoRA şart
+Tahmin İKİ ayaklı: *"MAE en çok, DINOv2 en az kazanır → sıralama değişir."* MAE'nin devasa deltası (+%80)
+alındı; **DINOv2-LoRA** (donukken zaten seg 0.601 ile tavana yakın → küçük delta beklenir) ile kıyas
+tamamlanmalı. İki delta yan yana gelince asıl bulgu netleşir: *pretraining sinyali "hangi ADAPTASYON
+rejiminde iyi"yi de öngörüyor.*
+
+---
+
 ## Kararlar — 2026-07-03 — İkinci omurga olarak DINO ekleniyor
 
 ResNet50+FPN ile yapılan Deneme 1–3'ten sonra, **aynı pipeline'ı omurgada DINO
