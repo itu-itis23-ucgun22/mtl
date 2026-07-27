@@ -634,11 +634,31 @@ en iyilerden birine.* MAE'nin bilinen imzası (*"linear-probe %68 zayıf, fine-t
 multi-task/donuk→LoRA ekseninde **birebir tekrarlandı.** Piksel-yeniden-kurma semantiği donukken saklıyor;
 küçük bir adaptasyon (LoRA) onu açığa çıkarıyor.
 
-### ⏳ Hikâye yarım — DINOv2-LoRA şart
-Tahmin İKİ ayaklı: *"MAE en çok, DINOv2 en az kazanır → sıralama değişir."* MAE'nin devasa deltası (+%80)
-alındı; **DINOv2-LoRA** (donukken zaten seg 0.601 ile tavana yakın → küçük delta beklenir) ile kıyas
-tamamlanmalı. İki delta yan yana gelince asıl bulgu netleşir: *pretraining sinyali "hangi ADAPTASYON
-rejiminde iyi"yi de öngörüyor.*
+### ✅ TAMAMLANDI (2026-07-27) — DINOv2-LoRA geldi, tahmin DOĞRULANDI
+DINOv2+LoRA (aynı 22.5k, aynı LoRA ayarı): **det 0.2662 / seg 0.6036 / cls_mAP 0.8156 / cls_F1 0.7787**
+(AP@0.50=0.445). İki-delta kontrastı:
+
+| metrik | MAE delta (zayıf-donuk) | DINOv2 delta (güçlü-donuk) |
+|---|---|---|
+| detection | **+79%** | +16% |
+| **seg_mIoU** | **+82%** | **+0.4%** (0.601→0.604, tavan) |
+| cls_mAP | +52% | +4.6% |
+| cls_F1 | +48% | +7.6% |
+
+**🎯 Bulgu — adaptasyon kazancı donuk-kaliteyle TERS ORANTILI (tahmin doğrulandı):** zayıf-donuk MAE
+LoRA'dan **devasa** (+%80), güçlü-donuk DINOv2 **çok az** (seg neredeyse sıfır — zaten tavanda) kazandı.
+En temiz kanıt seg: DINOv2 0.601→0.604 (headroom yok) vs MAE 0.255→0.464 (+%82). → *pretraining sinyali
+sadece "hangi görevde iyi"yi değil, **"hangi ADAPTASYON rejiminde iyi"yi de öngörüyor.***
+
+**⚠️ Nüans (tam sıralama flip'i DEĞİL):** DINOv2 **LoRA'da da dört metrikte lider** (det 0.266>0.239,
+seg 0.604>0.464) — MAE↔DINOv2 arası sıralama değişmedi; DINOv2 hem donuk hem LoRA'da en iyi. Değişen:
+(a) **uçurum çöktü** (MAE yaklaştı), (b) **MAE genel sıralamada zıpladı** — donuk sonuncuyken LoRA'da
+tüm donuk ViT-B'leri (DINOv1/CLIP/DeiT) ve ResNet/DINOv2-donuk'u geçti. Yani "en iyi donuk = en iyi
+fine-tuned" (DINOv2) ama **kazanç büyüklüğü donuk kaliteyle ters** — "donuk feature kalitesi ≠ backbone
+kalitesi" mesajı kanıtlandı.
+
+**Faz 2 kapandı** (MAE + DINOv2). Verim: DINOv2-LoRA 92.6M / 43.2 FPS / 502MB (arkadaşın GPU'su, A100
+tablosuyla kıyaslanamaz).
 
 ---
 
