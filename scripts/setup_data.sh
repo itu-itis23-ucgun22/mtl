@@ -21,9 +21,11 @@ mkdir -p "$ANN" "$IMG" "$RAW"
 echo "==> 1/4  COCO annotation'ları (kaynak)"
 if [ ! -f "$RAW/annotations/instances_train2017.json" ]; then
     echo "    indiriliyor: annotations_trainval2017.zip (~250 MB)"
-    # -4: IPv6 takılmasını önler · https: bazı ağlar düz http'yi bloklar · retry: geçici kopmalar
+    # ⚠️ http (https DEĞİL): images.cocodataset.org bir S3 CNAME'i, o hostname için geçerli TLS
+    # sertifikası YOK -> https "certificate subject name" hatası verir. COCO resmi olarak http sunar
+    # (annotation'lardaki coco_url alanları da http://). -4: IPv6 takılmasını önler. retry: kopmalar.
     ( cd "$RAW" && curl -4 -L --retry 5 --retry-delay 3 --connect-timeout 20 \
-        -O https://images.cocodataset.org/annotations/annotations_trainval2017.zip \
+        -O http://images.cocodataset.org/annotations/annotations_trainval2017.zip \
       && unzip -q -o annotations_trainval2017.zip && rm -f annotations_trainval2017.zip )
 else
     echo "    zaten var, atlanıyor"
