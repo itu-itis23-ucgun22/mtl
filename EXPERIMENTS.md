@@ -606,6 +606,42 @@ sonuç netleşince eklenecek.
 
 ---
 
+## Deneme 16 — 2026-07-27 — 🔬 FAZ 3: adaptif loss (Kendall) → "kazanç değil YENİDEN DAĞITIM"
+
+### Kurulum
+- `configs/train_colab_dinov2_adaptive.yaml`: donuk DINOv2 (Deneme 7) ile **TEK FARK** loss —
+  sabit `1/1/1/0.5` yerine **öğrenilen belirsizlik ağırlıkları** (Kendall 2018, `UncertaintyWeighter`:
+  görev başına öğrenilebilir `log σ²`, `L = Σ exp(-sᵢ)Lᵢ + sᵢ`). Feature-caching, aynı 22.5k/seed/lr.
+- Not: eğitimde **total loss negatife iniyor** — beklenen (log-var regularizer terimi `+sᵢ`, düşük-loss
+  görevlerde negatif). Kalite ölçüsü total değil, per-task loss + eval.
+
+### Sonuç — DINOv2 sabit-loss vs adaptif-loss (tek değişken: ağırlıklandırma)
+
+| metrik | sabit (Deneme 7) | adaptif | delta |
+|---|---|---|---|
+| detection_mAP | 0.2300 | 0.2155 | **−6%** |
+| seg_mIoU | 0.6011 | 0.5971 | −0.7% |
+| cls_mAP | 0.7800 | 0.8053 | **+3.3%** |
+| cls_F1 | 0.7239 | 0.7534 | **+4.1%** |
+
+**Öğrenilen ağırlıklar exp(-s):** cls_loss **29.0** ≫ seg 5.9 > det_cls 3.6 > bbox 2.5.
+
+### 🎯 Bulgu — uniform iyileşme YOK, kapasite yeniden dağıtıldı
+`exp(-sᵢ) ≈ 1/Lᵢ` (optimumda `sᵢ = log Lᵢ`) → **düşük-magnitüdlü loss yüksek ağırlık alır.** cls_loss zaten
+minik (~0.05) → model onu **29×** yukarı çekti (sabit 0.5'e karşı). Etki: **cls yukarı (+%3-4), detection
+aşağı (−%6), seg sabit** → adaptif ağırlıklandırma **kazanç değil yeniden-dağıtım.** Üstelik "yanlış" yönde:
+**kolay görevi (cls) besledi, en zor görevi (detection) aç bıraktı** — çünkü Kendall şeması görevleri
+*magnitüde göre* dengeler, *zorluğa göre* değil.
+
+**Yorum:** sabit `1/1/1/0.5` bu kurgu için zaten makul dengedeymiş; adaptif loss'un asıl etkisi küçük-magnitüdlü
+cls loss'unu normalize edip yukarı çekmek oldu. **Meşru bir negatif/nötr bulgu:** her ablasyon iyileştirmez;
+bu, mevcut sabit ağırlıkların savunulabilir olduğunu da gösterir. (İstenirse: cls'i elle down-weight'lemek
+yerine detection'ı upweight'leyen manuel ablasyon; ya da GradNorm/PCGrad — Faz 3 devamı.)
+
+**Faz 3 açıldı** (neck-PANet ablasyonu kod olarak hazır, koşulmadı; loss ablasyonu bu Deneme).
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum
