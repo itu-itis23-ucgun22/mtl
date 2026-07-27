@@ -30,6 +30,11 @@ class ModelConfig:
     pretrained: bool = True
     trainable_backbone_layers: int = 3
     cls_head_tap: str = "fpn_p5"  # or "backbone_body"
+    # --- Neck (Faz 3 ablasyon ekseni) ---
+    # "sfp"   = Simple Feature Pyramid (VARSAYILAN; tüm mevcut sonuçlar bununla)
+    # "panet" = SFP + çift yönlü çapraz-seviye füzyon (top-down + bottom-up)
+    # Yalnız paylaşılan neck modülünü kullanan omurgalarda: deit/mae (bkz. models/backbone.py).
+    neck: str = "sfp"
     # --- LoRA (Faz 2 adaptasyon ekseni; yalnız ViT gövdeli backbone'lar) ---
     lora: bool = False              # True: ViT gövdesine LoRA adaptörleri tak (taban donuk kalır)
     lora_rank: int = 8
@@ -45,6 +50,9 @@ class LossConfig:
     det_box: float = 1.0
     seg: float = 1.0
     cls: float = 0.5
+    # Faz 3 ablasyonu: True -> sabit ağırlıklar yerine ÖĞRENİLEN belirsizlik ağırlıkları
+    # (Kendall et al. 2018). Yukarıdaki det_cls/.../cls değerleri o zaman YOK SAYILIR.
+    adaptive: bool = False
 
 
 @dataclass

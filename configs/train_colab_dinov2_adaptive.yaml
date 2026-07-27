@@ -1,0 +1,51 @@
+# DINOv2 donuk + ADAPTİF LOSS — Faz 3 ablasyonu (görev-ağırlıklandırma ekseni).
+# Donuk DINOv2 (train_colab_dinov2.yaml, Deneme 7) ile TEK FARK: sabit 1/1/1/0.5 loss ağırlıkları
+# yerine ÖĞRENİLEN belirsizlik ağırlıkları (Kendall et al. 2018, UncertaintyWeighter).
+#
+#   ⭐ Kıyas: donuk DINOv2 sabit-loss (det 0.230/seg 0.601/cls 0.780/0.724) vs bu koşu.
+#   Soru: "Keyfi görev-ağırlıkları (0.5) yerine öğrenilen ağırlık sonucu değiştirir mi?"
+#   Feature-caching akışı (donuk trunk) — ucuz (~20 dk):
+#     python scripts/precompute_features.py --config configs/train_colab_dinov2_adaptive.yaml --split train
+#     python scripts/precompute_features.py --config configs/train_colab_dinov2_adaptive.yaml --split val
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_adaptive.yaml --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_adaptive.yaml \
+#            --checkpoint checkpoints/colab_dinov2_adaptive_cached_epoch15.pt
+#   Eğitim sonunda "Öğrenilen adaptif ağırlıklar exp(-s)" basılır -> hangi görev baskın.
+#
+# NOT: precompute donuk trunk'ı cache'ler; adaptif loss yalnız neck+head+log_var'ı etkiler ->
+# DINOv2 donuk cache'i (features/colab_dinov2_adaptive) ile aynı trunk, farklı loss. Ayrı run_name.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  # Sabit ağırlıklar adaptive=true iken YOK SAYILIR (log_var öğrenir); yine de referans için burada.
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+  adaptive: true          # <-- Kendall belirsizlik ağırlıklandırması
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_adaptive
+  checkpoint_every_steps: 500

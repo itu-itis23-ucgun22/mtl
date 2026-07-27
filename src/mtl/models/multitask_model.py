@@ -44,6 +44,7 @@ class MultiTaskModel(nn.Module):
         lora_dropout: float = 0.0,
         lora_targets: str = "qkv,proj",
         lora_blocks: int = -1,
+        adaptive_loss: bool = False,   # Faz 3: öğrenilen belirsizlik ağırlıkları (Kendall 2018)
     ):
         super().__init__()
         self.backbone = build_backbone(backbone_name, pretrained, trainable_backbone_layers)
@@ -73,6 +74,11 @@ class MultiTaskModel(nn.Module):
         self.detection_model = build_detection_model(self.backbone, det_num_classes)
         self.seg_head = SemanticSegHead(FPN_OUT_CHANNELS, seg_num_classes)
         self.cls_head = MultiLabelClsHead(FPN_OUT_CHANNELS, cls_num_labels)
+        # Faz 3: adaptif loss ağırlıklandırıcı (alt-modül → params optimizer'a + checkpoint'e otomatik girer)
+        self.loss_weighter = None
+        if adaptive_loss:
+            from mtl.losses.joint_loss import UncertaintyWeighter
+            self.loss_weighter = UncertaintyWeighter()
 
     def forward(self, images: Tensor, targets: Optional[List[Dict[str, Tensor]]] = None):
         if self.training and targets is None:

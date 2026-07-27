@@ -53,8 +53,11 @@ def train_one_epoch(
 
         optimizer.zero_grad()
         with torch.amp.autocast("cuda", enabled=amp and device.type == "cuda"): # 16 bite çevirip geri iş bittikten sonra eski haline çevirmek için kullanılır
-            loss_dict = model(images, targets) # model tahmin yapmaya başladı 
-            total_loss, raw = combine_losses(loss_dict, loss_cfg) # burada unceratainty i kullanabiliriz gelecekte
+            loss_dict = model(images, targets) # model tahmin yapmaya başladı
+            if getattr(model, "loss_weighter", None) is not None:   # Faz 3: öğrenilen ağırlıklar (Kendall)
+                total_loss, raw = model.loss_weighter(loss_dict)
+            else:
+                total_loss, raw = combine_losses(loss_dict, loss_cfg) # sabit ağırlıklar (varsayılan)
 
         if not torch.isfinite(total_loss):
             raise RuntimeError(f"Non-finite loss at step {step}: {raw}")

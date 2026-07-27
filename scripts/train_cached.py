@@ -84,6 +84,7 @@ def main() -> None:
         det_num_classes=base.num_classes,
         seg_num_classes=base.num_classes + 1,
         cls_num_labels=base.num_classes,
+        adaptive_loss=cfg.loss.adaptive,
     ).to(device)
 
     # Yalnızca gradyanı olan parametreler (neck + head'ler); donuk ViT güncellenmez.
@@ -118,7 +119,10 @@ def main() -> None:
             optimizer.zero_grad()
             with torch.amp.autocast("cuda", enabled=amp_enabled):
                 loss_dict = model.forward_from_trunk(trunk, img_hw, targets)
-                total_loss, raw = combine_losses(loss_dict, cfg.loss)
+                if model.loss_weighter is not None:            # Faz 3: öğrenilen ağırlıklar
+                    total_loss, raw = model.loss_weighter(loss_dict)
+                else:                                          # sabit ağırlıklar (varsayılan)
+                    total_loss, raw = combine_losses(loss_dict, cfg.loss)
 
             if not torch.isfinite(total_loss):
                 raise RuntimeError(f"Non-finite loss at step {step}: {raw}")
@@ -142,6 +146,9 @@ def main() -> None:
         print(f"[epoch {epoch}] bitti, step {step}")
 
     print(f"Training finished after {step} steps.")
+    if model.loss_weighter is not None:  # öğrenilen görev ağırlıkları (hangi görev baskın)
+        w = model.loss_weighter.weights()
+        print("Öğrenilen adaptif ağırlıklar exp(-s):", {k: round(v, 3) for k, v in w.items()})
 
 
 if __name__ == "__main__":
