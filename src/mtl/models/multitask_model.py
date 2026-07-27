@@ -45,6 +45,7 @@ class MultiTaskModel(nn.Module):
         lora_targets: str = "qkv,proj",
         lora_blocks: int = -1,
         adaptive_loss: bool = False,   # Faz 3: öğrenilen belirsizlik ağırlıkları (Kendall 2018)
+        seg_neck: str = "fcn",         # Faz 3: seg decoder "fcn" | "aspp" (görev-özel neck)
     ):
         super().__init__()
         self.backbone = build_backbone(backbone_name, pretrained, trainable_backbone_layers)
@@ -72,7 +73,7 @@ class MultiTaskModel(nn.Module):
             print(f"[lora] {n} Linear'a LoRA enjekte edildi "
                   f"(rank={lora_rank}, alpha={lora_alpha}, targets={lora_targets}, blocks={lora_blocks})")
         self.detection_model = build_detection_model(self.backbone, det_num_classes)
-        self.seg_head = SemanticSegHead(FPN_OUT_CHANNELS, seg_num_classes)
+        self.seg_head = SemanticSegHead(FPN_OUT_CHANNELS, seg_num_classes, neck=seg_neck)
         self.cls_head = MultiLabelClsHead(FPN_OUT_CHANNELS, cls_num_labels)
         # Faz 3: adaptif loss ağırlıklandırıcı (alt-modül → params optimizer'a + checkpoint'e otomatik girer)
         self.loss_weighter = None

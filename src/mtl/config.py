@@ -30,11 +30,10 @@ class ModelConfig:
     pretrained: bool = True
     trainable_backbone_layers: int = 3
     cls_head_tap: str = "fpn_p5"  # or "backbone_body"
-    # --- Neck (Faz 3 ablasyon ekseni) ---
-    # "sfp"   = Simple Feature Pyramid (VARSAYILAN; tüm mevcut sonuçlar bununla)
-    # "panet" = SFP + çift yönlü çapraz-seviye füzyon (top-down + bottom-up)
-    # Yalnız paylaşılan neck modülünü kullanan omurgalarda: deit/mae (bkz. models/backbone.py).
-    neck: str = "sfp"
+    # --- Görev-özel neck (Faz 3 ablasyon ekseni) ---
+    # Segmentation decoder: "fcn" (VARSAYILAN; tüm mevcut sonuçlar bununla) |
+    # "aspp" (Atrous Spatial Pyramid Pooling, DeepLabv3 — çok-ölçekli bağlam, ViT-uyumlu).
+    seg_neck: str = "fcn"
     # --- LoRA (Faz 2 adaptasyon ekseni; yalnız ViT gövdeli backbone'lar) ---
     lora: bool = False              # True: ViT gövdesine LoRA adaptörleri tak (taban donuk kalır)
     lora_rank: int = 8

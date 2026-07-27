@@ -1,0 +1,50 @@
+# DINOv2 donuk + GÖREV-ÖZEL SEG NECK (ASPP) — Faz 3 ablasyonu (neck ekseni).
+# Donuk DINOv2 (train_colab_dinov2.yaml, Deneme 7) ile TEK FARK: segmentation decoder'ı
+# düz FCN yerine ASPP (Atrous Spatial Pyramid Pooling, DeepLabv3) — çok-ölçekli bağlam.
+#
+#   ⭐ Kıyas: donuk DINOv2 FCN-seg (seg 0.601) vs bu koşu (ASPP-seg).
+#   Soru: "Görev-özel seg neck (ASPP), detection için tasarlanmış paylaşılan piramidin tek
+#   seviyesinden beslenen düz FCN'i geçer mi?" ASPP hiyerarşi istemez -> ViT-uyumlu (PANet'in aksine).
+#   Feature-caching (donuk trunk aynı) — ucuz (~20-30 dk; ASPP FCN'den ağır, dilated conv'lar).
+#     python scripts/precompute_features.py --config configs/train_colab_dinov2_segaspp.yaml --split train
+#     python scripts/precompute_features.py --config configs/train_colab_dinov2_segaspp.yaml --split val
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_segaspp.yaml --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_segaspp.yaml \
+#            --checkpoint checkpoints/colab_dinov2_segaspp_cached_epoch15.pt
+#
+# NOT: ASPP yalnız seg head'i (level "0"'dan) etkiler; detection/cls aynı. Ayrı run_name -> DINOv2
+# baseline cache'iyle karışmaz. OOM olursa (ASPP stride-4'te ağır) batch_size'ı 2'ye indir.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: aspp          # <-- görev-özel seg decoder (FCN yerine ASPP)
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_segaspp
+  checkpoint_every_steps: 500

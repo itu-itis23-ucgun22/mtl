@@ -85,6 +85,7 @@ def main() -> None:
         seg_num_classes=base.num_classes + 1,
         cls_num_labels=base.num_classes,
         adaptive_loss=cfg.loss.adaptive,
+        seg_neck=cfg.model.seg_neck,
     ).to(device)
 
     # Yalnızca gradyanı olan parametreler (neck + head'ler); donuk ViT güncellenmez.
