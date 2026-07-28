@@ -52,3 +52,23 @@ def test_overfit_one_batch():
         losses.append(total.item())
 
     assert losses[-1] < losses[0], losses
+
+
+def test_resnet_seg_aspp_forward():
+    """ResNet50 + ASPP seg decoder (Faz 3 'decoder mı feature mı') wiring'i: bir train forward
+    dört sonlu loss üretmeli. ASPP FPN level-0'ı (256-ch) okur; ağ/timm gerekmez (pretrained=False)."""
+    torch.manual_seed(0)
+    model = MultiTaskModel(
+        backbone_name="resnet50",
+        pretrained=False,
+        det_num_classes=NUM_CLASSES,
+        seg_num_classes=NUM_CLASSES + 1,
+        cls_num_labels=NUM_CLASSES,
+        seg_neck="aspp",
+    )
+    model.train()
+    images, targets = _make_batch()
+    loss_dict = model(images, targets)
+    assert set(loss_dict) == {"classification", "bbox_regression", "seg_loss", "cls_loss"}
+    for k, v in loss_dict.items():
+        assert torch.isfinite(v), f"{k} sonlu değil: {v}"

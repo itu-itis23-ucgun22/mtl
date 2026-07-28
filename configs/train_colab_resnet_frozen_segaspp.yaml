@@ -1,0 +1,53 @@
+# Donuk ResNet50 + seg decoder ASPP — Faz 3 "ResNet seg zayıflığı: decoder mı feature mı?"
+# Donuk ResNet baseline (RESULTS satır 8, Deneme 6: seg 0.3215) ile TEK FARK seg decoder:
+#   FCN yerine ASPP (DeepLabv3). Diğer HER ŞEY satır 8 ile birebir (layers=0, batch=4, epochs=16,
+#   lr/wd/img_size/seed/loss/aug) -> tek değişken = seg decoder.
+#
+#   Soru: "ResNet supervised pretraining'i seg'de geride (cls/det'te güçlü). Bu zayıflık DECODER
+#          eksikliği mi (düz FCN çok-ölçekli bağlamı görmezden geliyor) yoksa FEATURE semantiği mi
+#          (donuk supervised feature dense-semantikte zayıf)?"
+#   ASPP -> (b) decoder'a dokunur, (a) feature'a dokunamaz. DeepLab = ResNet+ASPP kanonik eşleşme;
+#   conv feature ASPP'nin dilated conv'larına iyi oturur (ViT'te oturmamıştı, Deneme 17).
+#     ASPP belirgin oynatırsa  -> zayıflık kısmen DECODER'mış.
+#     ~düz kalırsa             -> zayıflık donuk supervised FEATURE semantiğinde (neck çözmez).
+#
+# ResNet donuk gövde forward'ı ucuz -> cache YOK, normal train.py. Kıyas: RESULTS satır 8.
+#   python scripts/train.py --config configs/train_colab_resnet_frozen_segaspp.yaml
+#   python scripts/eval.py  --config configs/train_colab_resnet_frozen_segaspp.yaml \
+#          --checkpoint checkpoints/colab_resnet_frozen_segaspp_epoch15.pt
+#
+# NOT: amp=false BİLEREK — Deneme 6'da donuk ResNet AMP'de focal-loss NaN atmıştı; fp32 güvenli.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: resnet50
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: aspp              # <-- TEK FARK: FCN yerine ASPP (DeepLabv3 seg decoder)
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: false                 # <-- NaN önlemi (Deneme 6); baseline efektif fp32'yle örtüşür
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_resnet_frozen_segaspp
+  checkpoint_every_steps: 500
