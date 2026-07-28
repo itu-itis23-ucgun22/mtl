@@ -97,6 +97,7 @@ def main() -> None:
         lora_blocks=cfg.model.lora_blocks,
         adaptive_loss=cfg.loss.adaptive,  # checkpoint'teki loss_weighter anahtarı uyuşsun
         seg_neck=cfg.model.seg_neck,
+        neck_mode=cfg.model.neck_mode,  # checkpoint'teki det/seg/cls_neck + head kanal anahtarları uyuşsun
     ).to(device)
     step = load_checkpoint(model, optimizer=None, path=args.checkpoint, map_location=str(device))
 

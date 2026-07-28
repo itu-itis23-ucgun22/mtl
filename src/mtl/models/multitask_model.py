@@ -45,7 +45,8 @@ class MultiTaskModel(nn.Module):
         lora_targets: str = "qkv,proj",
         lora_blocks: int = -1,
         adaptive_loss: bool = False,   # Faz 3: öğrenilen belirsizlik ağırlıkları (Kendall 2018)
-        seg_neck: str = "fcn",         # Faz 3: seg decoder "fcn" | "aspp" (görev-özel neck)
+        seg_neck: str = "fcn",         # Faz 3: seg decoder "fcn" | "aspp" | "lraspp"
+        neck_mode: str = "shared",     # Faz 3: "shared" | "per_task_identical" | "task_native"
     ):
         super().__init__()
         self.backbone = build_backbone(backbone_name, pretrained, trainable_backbone_layers)
@@ -73,8 +74,49 @@ class MultiTaskModel(nn.Module):
             print(f"[lora] {n} Linear'a LoRA enjekte edildi "
                   f"(rank={lora_rank}, alpha={lora_alpha}, targets={lora_targets}, blocks={lora_blocks})")
         self.detection_model = build_detection_model(self.backbone, det_num_classes)
-        self.seg_head = SemanticSegHead(FPN_OUT_CHANNELS, seg_num_classes, neck=seg_neck)
-        self.cls_head = MultiLabelClsHead(FPN_OUT_CHANNELS, cls_num_labels)
+
+        # Faz 3 neck ekseni. "shared": tek paylaşılan SFP üç head'i besler (mevcut, tüm sonuçlar).
+        # "per_task_identical": her göreve KENDİ (özdeş) SFP neck'i -> saf interference probu.
+        # "task_native": det=SFP (piramit), seg=ASPP (HAM trunk'tan), cls=GAP (HAM trunk'tan) -> her
+        # göreve native mimari. Hepsi donuk trunk üstünde -> cache geçerli. per_task_* yalnız
+        # trunk_forward'lı ViT gövdeli backbone'lar (DINO ailesi) içindir.
+        if neck_mode not in ("shared", "per_task_identical", "task_native"):
+            raise ValueError(
+                f"neck_mode '{neck_mode}' bilinmiyor. Desteklenen: "
+                "'shared', 'per_task_identical', 'task_native'."
+            )
+        self.neck_mode = neck_mode
+        if neck_mode != "shared":
+            if not hasattr(self.backbone, "trunk_forward") or not hasattr(self.backbone, "vit"):
+                raise ValueError(
+                    f"neck_mode='{neck_mode}' yalnızca trunk_forward'lı ViT gövdeli backbone'larda "
+                    f"desteklenir (dino/dinov2/... '.vit'); '{backbone_name}' uygun değil."
+                )
+            embed_dim = self.backbone.vit.embed_dim
+
+        # Seg/cls head'lerin girdi kanalı moda göre değişir. task_native'de bu iki head HAM trunk'tan
+        # (embed_dim) beslenir; diğer modlarda SFP çıktısından (256). Detection her modda 256'lık SFP
+        # dict'i alır (RetinaNet 5-seviye sözleşmesi), o yüzden detection_model değişmez.
+        if neck_mode == "task_native":
+            if seg_neck == "lraspp":
+                raise ValueError(
+                    "task_native modda seg neck 'lraspp' olamaz (tek trunk haritasından '0'+'2' "
+                    "türetemez); 'aspp' (native dense context) veya 'fcn' kullan."
+                )
+            seg_in = cls_in = embed_dim
+        else:
+            seg_in = cls_in = FPN_OUT_CHANNELS
+        self.seg_head = SemanticSegHead(seg_in, seg_num_classes, neck=seg_neck)
+        self.cls_head = MultiLabelClsHead(cls_in, cls_num_labels)
+
+        # det her modda (shared hariç) kendi SFP'sini alır; per_task_identical'da seg/cls de SFP.
+        if neck_mode != "shared":
+            from mtl.models.sfp import SimpleFeaturePyramid
+
+            self.det_neck = SimpleFeaturePyramid(embed_dim, FPN_OUT_CHANNELS)
+        if neck_mode == "per_task_identical":
+            self.seg_neck = SimpleFeaturePyramid(embed_dim, FPN_OUT_CHANNELS)
+            self.cls_neck = SimpleFeaturePyramid(embed_dim, FPN_OUT_CHANNELS)
         # Faz 3: adaptif loss ağırlıklandırıcı (alt-modül → params optimizer'a + checkpoint'e otomatik girer)
         self.loss_weighter = None
         if adaptive_loss:
@@ -85,8 +127,25 @@ class MultiTaskModel(nn.Module):
         if self.training and targets is None:
             raise ValueError("targets must be provided in training mode")
         _, _, height, width = images.shape
-        features = self.backbone(images)  # OrderedDict: "0".."3" (+ "pool")
-        return self._run_heads(features, (height, width), images.device, targets)
+        if self.neck_mode == "shared":
+            shared = self.backbone(images)  # OrderedDict: "0".."3" (+ "pool")
+            feats = (shared, shared, shared)
+        else:
+            trunk = self.backbone.trunk_forward(images)  # donuk gövde grid'i (B, embed, h, w)
+            feats = self._mode_feats(trunk)
+        return self._run_heads(feats, (height, width), images.device, targets)
+
+    def _mode_feats(self, trunk: Tensor):
+        """(feats_det, feats_seg, feats_cls) — neck_mode'a göre trunk'tan türetilir.
+
+        per_task_identical: üçü de ayrı (özdeş) SFP çıktısı (5-seviye dict).
+        task_native: det=SFP dict; seg/cls için SFP YOK — HAM trunk doğrudan head'in okuduğu anahtara
+        sarılır. seg_head (ASPP/FCN) "0"'ı, cls_head (GAP) "3"'ü indeksler, o yüzden trunk'ı o
+        anahtarlara koymak yeterli (head'ler embed_dim girdiyle kuruldu)."""
+        if self.neck_mode == "per_task_identical":
+            return self.det_neck(trunk), self.seg_neck(trunk), self.cls_neck(trunk)
+        # task_native
+        return self.det_neck(trunk), {"0": trunk}, {"3": trunk}
 
     def forward_from_trunk(
         self, trunk: Tensor, image_hw: tuple, targets: Optional[List[Dict[str, Tensor]]] = None
@@ -100,13 +159,19 @@ class MultiTaskModel(nn.Module):
         """
         if self.training and targets is None:
             raise ValueError("targets must be provided in training mode")
-        features = self.backbone.neck_forward(trunk)
-        return self._run_heads(features, image_hw, trunk.device, targets)
+        if self.neck_mode == "shared":
+            shared = self.backbone.neck_forward(trunk)
+            feats = (shared, shared, shared)
+        else:
+            feats = self._mode_feats(trunk)
+        return self._run_heads(feats, image_hw, trunk.device, targets)
 
-    def _run_heads(self, features, image_hw, device, targets):
-        """features (5-seviye piramit) -> üç head. forward ve forward_from_trunk'ın ortak yolu."""
+    def _run_heads(self, features_per_task, image_hw, device, targets):
+        """(feats_det, feats_seg, feats_cls) -> üç head. Paylaşılan modda üçü de aynı dict'tir;
+        task-specific modda her görev kendi neck çıktısını alır. forward/forward_from_trunk ortak yolu."""
+        feats_det, feats_seg, feats_cls = features_per_task
         height, width = image_hw
-        features_list = list(features.values())
+        features_list = list(feats_det.values())
         batch_size = features_list[0].shape[0]
         image_sizes = [(height, width)] * batch_size
 
@@ -117,8 +182,8 @@ class MultiTaskModel(nn.Module):
         anchors = self.detection_model.anchor_generator(image_list, features_list)
         det_head_outputs = self.detection_model.head(features_list)
 
-        seg_logits = self.seg_head(features, output_size=(height, width))
-        cls_logits = self.cls_head(features)
+        seg_logits = self.seg_head(feats_seg, output_size=(height, width))
+        cls_logits = self.cls_head(feats_cls)
 
         if self.training:
             det_targets = [{"boxes": t["boxes"], "labels": t["labels"]} for t in targets]

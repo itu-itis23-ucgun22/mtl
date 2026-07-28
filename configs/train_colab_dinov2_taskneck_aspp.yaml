@@ -1,0 +1,50 @@
+# DINOv2 donuk + AYRIK NECK + seg ASPP — Faz 3 "2×2" ablasyonunun (B′) köşesi.
+# Baseline (Deneme 7) ile İKİ fark: (1) her göreve ayrı SFP neck (neck_mode=per_task_identical),
+# (2) seg decoder ASPP. Yani "ayrışma + görev-özel decoder" BİRLİKTE. det/cls yine kendi
+# ayrı SFP'lerinde ama decoder'ları standart (RetinaNet / GAP).
+#
+#   2×2 köşeleri:  A=paylaşılan+FCN (0.601) · A′=paylaşılan+ASPP · B=ayrık+FCN · B′=ayrık+ASPP (bu)
+#   Soru: "Neck'i ayırmak (B) VE seg'e özel decoder vermek (A′) — birlikte (B′) en çok mu kazandırır,
+#          yoksa biri diğerini gölgeler mi?" -> B′ vs A/A′/B ile katkılar ayrışır.
+#   Trunk donuk ve AYNI -> tek DINOv2 trunk cache'ini paylaş (precompute'u tekrar etme).
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_taskneck_aspp.yaml \
+#            --features-dir features/dinov2_trunk/train --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_taskneck_aspp.yaml \
+#            --checkpoint checkpoints/colab_dinov2_taskneck_aspp_cached_epoch15.pt
+#
+# NOT: OOM olursa (ayrık neck 3× SFP + ASPP stride-4) batch_size'ı 2'ye indir.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: aspp                   # <-- seg decoder ASPP
+  neck_mode: per_task_identical    # <-- her göreve ayrı (özdeş) SFP neck
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_taskneck_aspp
+  checkpoint_every_steps: 500

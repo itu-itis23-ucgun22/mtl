@@ -132,11 +132,18 @@ nesnelik...). Doğal soru: **tek paylaşılan neck üç görevi aynı feature'a 
 interference. Göreve özel neck / uzman-yönlendirme bunu azaltır mı?** Bu, yukarıdaki tek-görev
 ablasyonunun **mekanizma tarafı** — interference'ı sadece ÖLÇMEK değil, AZALTMAYI denemek.
 
-**Kanonik-uyumlu kurgu (backbone SABİT = DINOv2 donuk, tek değişken = neck yapısı):**
-- **A (baseline):** donuk trunk + **paylaşılan SFP** (mevcut mimari).
-- **B (task-specific branch):** donuk trunk + **görev başına ayrı neck** (det/seg/cls). Gating YOK,
-  yönlendirme sabit (görev kimliği). Basit; "ayrıştırmak tek başına yardım ediyor mu"yu ölçer.
-- **C (gerçek MMoE, Wg'li):** **K paylaşımlı uzman-neck + görev başına gate** (Ma et al. 2018):
+**Kanonik-uyumlu kurgu (backbone SABİT = DINOv2 donuk, tek değişken = neck yapısı).** Kod: tek bir
+`model.neck_mode` enum'u (config.py) — değerleri A/B/D basamaklarına karşılık gelir; hepsi donuk trunk
+üstünde (cache geçerli, precompute YOK). Detay: [multitask_model.py](src/mtl/models/multitask_model.py).
+- **A (baseline) — `neck_mode: shared`:** donuk trunk + **paylaşılan SFP** (mevcut mimari, tüm sonuçlar). ✅ implement
+- **B (task-specific branch) — `neck_mode: per_task_identical`:** donuk trunk + **görev başına ayrı
+  (yapıca özdeş) SFP** (det/seg/cls). Gating YOK, yönlendirme sabit. "ayrıştırmak tek başına yardım
+  ediyor mu"yu ölçer (saf interference; tek değişken = paylaşım). ✅ implement (`train_colab_dinov2_taskneck.yaml`)
+- **D (task-native neck) — `neck_mode: task_native`:** her göreve **kendi native mimarisi**, doğrudan
+  ham trunk'tan: **det=SFP** (piramit, RetinaNet zorunlu), **seg=ASPP** (dense context, SFP yok),
+  **cls=GAP+Linear** (SFP yok). ⚠️ çok-değişkenli (neck'ler mimari farklı → "interference azaldı"
+  denemez; "native neck kazandırır mı" sorusu). RESULTS'a confound notuyla. ✅ implement (`..._native.yaml`)
+- **C (gerçek MMoE, Wg'li) — henüz eskiz:** **K paylaşımlı uzman-neck + görev başına gate** (Ma et al. 2018):
   her task `g_t = softmax(Wg_t · pool(trunk))` ile uzmanların **ağırlıklı toplamını** alır →
   kendi head'ine. Uzmanlar paylaşımlı (ortak yapı, pozitif transfer) + gate göreve-özel
   (interference↓). **v1:** soft gating, görüntü-başına, K=4. İşe yararsa → sparse top-k (hız) /
@@ -151,10 +158,10 @@ ablasyonunun **mekanizma tarafı** — interference'ı sadece ÖLÇMEK değil, A
 - ⚠️ **Getirisi belirsiz:** donuk DINOv2 zaten tavana yakın (seg 0.60) → ölçülebilir kazanç
   çıkmayabilir. **Negatif sonuç da geçerli bir bulgu**; beklentiyi "belki yardım etmez" diye kur.
 
-**Sıra:** BEiT re-run → **Faz 2 (LoRA) BİTTİKTEN sonra.** Faz 2 tezin merkezî devamı (keskin MAE
-tahmini); MMoE ona **dik** → önce Faz 2'yi bitir, bunu koda şimdi sokma. Kod eskizi hazır:
-`MultiTaskModel`'de `task_specific_neck` bayrağı + `TaskExpert` (SFP) × K + `TaskGate` (Wg) × 3 +
-ağırlıklı toplam. Girişilirse ~3 dosya değişir, **baseline (bayrak False) bozulmaz.**
+**Durum:** A/B/D `neck_mode` enum'u olarak implement edildi (baseline `shared` bozulmadan). Koşu
+sırası: B (`taskneck.yaml`) ve D (`taskneck_native.yaml`) donuk DINOv2 cache'ini paylaşır → precompute
+YOK, sadece `train_cached` + `eval`. C (MMoE, gate'li) hâlâ eskiz: `TaskExpert` (SFP) × K + `TaskGate`
+(Wg) × 3 + ağırlıklı toplam — `neck_mode`'a dördüncü değer olarak eklenir, **baseline bozulmaz.**
 
 ### Geriye dönük ablasyonlar — "DINOv2 neden en iyi?" (opsiyonel, belki deneriz)
 Deneme 7: donuk DINOv2 dört metrikte de en iyi (seg 0.60 açık ara). Ama DINOv2, DINOv1'den **üç**

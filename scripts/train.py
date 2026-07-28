@@ -79,6 +79,7 @@ def main() -> None:
         lora_blocks=cfg.model.lora_blocks,
         adaptive_loss=cfg.loss.adaptive,
         seg_neck=cfg.model.seg_neck,
+        neck_mode=cfg.model.neck_mode,
     ).to(device)
 
     # LoRA/donuk backbone'da taban parametreler requires_grad=False → optimizer yalnız

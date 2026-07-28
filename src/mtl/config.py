@@ -36,6 +36,15 @@ class ModelConfig:
     #   "aspp"   = ASPP/DeepLabv3, çok-ölçekli bağlam (ağır)
     #   "lraspp" = LR-ASPP/MobileNetV3, hafif global bağlam (ucuz, edge-dostu)
     seg_neck: str = "fcn"
+    # Faz 3 "task-interference / task-native neck" ekseni. Değerler:
+    #   "shared"             -> tek PAYLAŞILAN SFP üç head'i besler (VARSAYILAN; tüm sonuçlar bununla).
+    #   "per_task_identical" -> her göreve KENDİ (yapıca özdeş) SFP neck'i; donuk trunk paylaşılır.
+    #                           Tek değişken = neck paylaşımı -> saf interference probu.
+    #   "task_native"        -> her göreve NATIVE neck: det=SFP (piramit, zorunlu), seg=ASPP (dense
+    #                           context, HAM trunk'tan; SFP yok), cls=GAP+Linear (HAM trunk'tan).
+    #                           "göreve özel mimari neck kazandırır mı" (çok-değişkenli; RESULTS'a not).
+    # Hepsi donuk trunk üstünde -> cache geçerli. per_task_* yalnız ViT gövdeli (trunk_forward'lı) backbone.
+    neck_mode: str = "shared"
     # --- LoRA (Faz 2 adaptasyon ekseni; yalnız ViT gövdeli backbone'lar) ---
     lora: bool = False              # True: ViT gövdesine LoRA adaptörleri tak (taban donuk kalır)
     lora_rank: int = 8

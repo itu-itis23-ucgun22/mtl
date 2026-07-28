@@ -1,0 +1,53 @@
+# DINOv2 donuk + TASK-NATIVE NECK — Faz 3 "her göreve kendi native neck'i" (Tasarım D).
+# Baseline (Deneme 7, seg 0.601 / det 0.230 / cls 0.780) ile TEK KAVRAMSAL fark: paylaşılan tek
+# SFP yerine, her görev KENDİ ailesinin native neck'inden — hepsi doğrudan donuk trunk'tan:
+#   det -> SFP (piramit; RetinaNet 5-seviye sözleşmesi zorunlu kılar)
+#   seg -> ASPP (dense multi-scale context, HAM trunk 768-kanal üstünde; SFP dalı YOK)
+#   cls -> GAP + Linear (HAM trunk global-pool; SFP dalı YOK)
+#
+#   Soru: "Her göreve native mimari neck vermek (SFP'yi hepsine dayatmak yerine) kazandırır mı?"
+#   ⚠️ ÇOK-DEĞİŞKENLİ: neck'ler mimari olarak farklı -> "interference azaldı" DENEMEZ (seg iyileşirse
+#      ASPP > SFP0+FCN de olabilir). Saf interference için per_task_identical (taskneck.yaml).
+#      RESULTS.md'ye bu confound notuyla işlenmeli.
+#   Trunk donuk ve AYNI -> tek DINOv2 trunk cache'ini paylaş (precompute'u TEKRAR ETME):
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_taskneck_native.yaml \
+#            --features-dir features/dinov2_trunk/train --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_taskneck_native.yaml \
+#            --checkpoint checkpoints/colab_dinov2_taskneck_native_cached_epoch15.pt
+#
+# NOT: OOM olursa batch_size'ı 2'ye indir (ASPP ham 768-kanal trunk üstünde çalışır).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: aspp              # <-- seg'in NATIVE neck'i = ASPP (ham trunk'tan dense context)
+  neck_mode: task_native      # <-- det=SFP, seg=ASPP, cls=GAP; her göreve native neck
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_taskneck_native
+  checkpoint_every_steps: 500

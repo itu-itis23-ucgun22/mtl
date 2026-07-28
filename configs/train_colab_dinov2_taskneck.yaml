@@ -1,0 +1,51 @@
+# DINOv2 donuk + TASK-SPECIFIC NECK — Faz 3 "task-interference probu".
+# Donuk DINOv2 (Deneme 7, seg 0.601 / det 0.230 / cls 0.780) ile TEK FARK: paylaşılan tek SFP
+# yerine her göreve AYRI SFP neck (det_neck / seg_neck / cls_neck). Donuk trunk paylaşılır.
+#
+#   Soru: "Üç görev tek paylaşılan neck'e sıkışınca task interference oluyor mu? Neck'i ayırmak
+#          (her göreve kendi SFP'si) bunu azaltır mı?" -> A (paylaşılan) vs B (ayrık) temiz kıyas.
+#   Tek değişken = neck paylaşımı; seg decoder hâlâ FCN (baseline ile aynı) -> saf interference testi.
+#   Trunk donuk ve AYNI -> cache geçerli: DINOv2 baseline cache'ini paylaş, precompute YOK.
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_taskneck.yaml \
+#            --features-dir features/colab_dinov2 --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_taskneck.yaml \
+#            --checkpoint checkpoints/colab_dinov2_taskneck_cached_epoch15.pt
+#
+# NOT: negatif/nötr sonuç da geçerli — donuk DINOv2 zaten tavana yakın (seg 0.60), interference
+# küçük olabilir. Sanity: baseline'a göre üç metrik de düşmemeli; ayrışma yardım ederse yükselir.
+# İleride B2: seg_neck'i aspp yapıp "ayrık + görev-özel decoder" birlikte denenebilir (ayrı config).
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: fcn                    # baseline decoder (tek değişken neck paylaşımı olsun diye FCN)
+  neck_mode: per_task_identical    # <-- her göreve ayrı (özdeş) SFP neck (paylaşılan SFP yerine)
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_taskneck
+  checkpoint_every_steps: 500
