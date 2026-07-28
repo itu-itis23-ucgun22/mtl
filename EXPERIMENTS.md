@@ -642,6 +642,58 @@ yerine detection'ı upweight'leyen manuel ablasyon; ya da GradNorm/PCGrad — Fa
 
 ---
 
+## Deneme 17 — 2026-07-28 — 🔬 FAZ 3: task-native neck → "donuk tavanda kazanç yok; çözünürlük > bağlam"
+
+### Kurulum
+- `configs/train_colab_dinov2_taskneck_native.yaml`: donuk DINOv2 (Deneme 7) ile **tek eksen = neck yapısı**.
+  Paylaşılan tek SFP yerine her göreve **native neck**, hepsi doğrudan ham donuk trunk'tan:
+  **det=SFP** (piramit, RetinaNet 5-seviye sözleşmesi zorunlu), **seg=ASPP** (dense context, SFP dalı YOK),
+  **cls=GAP+Linear** (ham 768-boyutlu trunk, SFP dalı YOK).
+- Kod: `neck_mode` enum'u (`shared` | `per_task_identical` | `task_native`; config.py + multitask_model.py,
+  commit c269321). Baseline `shared` bozulmadı; `_run_heads` değişmedi (seg/cls head'leri embed_dim girdiyle kurulur).
+- Trunk donuk ve AYNI → **DINOv2 baseline cache'i paylaşıldı, precompute YOK.** Sabit loss `1/1/1/0.5`,
+  aynı 22.5k/seed/lr. Feature-caching, `--no-amp`. Checkpoint: `colab_dinov2_taskneck_native_cached_epoch15.pt`.
+
+### Sonuç — shared (Deneme 7) vs task_native (tek değişken: neck)
+
+| metrik | shared (Deneme 7) | task_native | delta |
+|---|---|---|---|
+| detection_mAP | 0.2300 | 0.2277 | −1.0% |
+| seg_mIoU | 0.6011 | 0.5951 | −1.0% |
+| cls_mAP | 0.7800 | 0.7947 | **+1.9%** |
+| cls_F1 | 0.7239 | 0.7318 | +1.1% |
+
+(Verim: 92.1M / 45.4 FPS / 548 MB — benchmark donuk backbone+SFP forward'ını ölçer, baseline DINOv2 ile aynı;
+native neck'lerin ekstra parametresi head tarafında, bu ölçümde görünmez.)
+
+### 🎯 Bulgu — donuk-tavanda anlamlı kazanç YOK (ROADMAP tahmini doğrulandı)
+Farklar ±1% bandında; net etki küçük bir **yeniden-dağıtım** (cls hafif ↑, det/seg hafif ↓). ROADMAP'in
+"donuk DINOv2 zaten tavana yakın (seg 0.60) → ölçülebilir kazanç çıkmayabilir; **negatif de geçerli bulgu**"
+beklentisi tuttu. Üç mekanizma, hepsi tutarlı:
+1. **cls +%1.9 (tek pozitif sinyal, temiz mekanizma):** native cls neck GAP'i **ham 768-d trunk'a** uygular;
+   baseline SFP trunk'ı **256-kanala + stride-32'ye sıkıştırıp** öyle pool'lar → sıkıştırılmamış zengin
+   feature görüntü-sınıflandırmaya küçük ama tutarlı fayda. Beklenen yönde.
+2. **seg −%1.0 (ASPP yardım ETMEDİ):** kaba trunk grid'inde (37×37) ASPP + ×14 upsample, baseline'ın
+   SFP-level0'ından (stride-4, çok daha ince) + FCN'inden **sınır olarak daha kaba**. Bağlam kazancı
+   çözünürlük kaybıyla siliniyor → **alt-bulgu: donuk DINOv2 seg için çözünürlük > bağlam.** (DeepLabv3
+   vs v3+ noktası: saf ASPP + büyük upsample sınır-kaba.)
+3. **det ~sabit:** iki modda da det=SFP; tek fark ayrı vs paylaşılan ağırlık → ihmal edilebilir.
+
+**Kıyas (Deneme 16 ile):** adaptif loss da cls'i yukarı, det'i aşağı çekmişti (yeniden-dağıtım). Burada da
+benzer desen ama **çok daha küçük magnitüd** ve **farklı mekanizma** (mimari, ağırlıklandırma değil).
+
+### ⚠️ Kapsam (confound) — saf interference DEĞİL
+Çok-değişkenli: seg dalı hem **ayrıştı** hem **decoder değişti** (SFP+FCN → ASPP). Bu yüzden "interference
+azaldı" **DENEMEZ**; yalnız *"native mimari neck bu donuk-tavan rejiminde kazandırmıyor"* denebilir. Saf
+interference için `per_task_identical` (B: aynı SFP dağarcığı, tek değişken = paylaşım) gerekli.
+
+### Sonraki adım
+- **`per_task_identical` (B) koşusu** → **A→B→D merdiveni**: "ayırmak" (paylaşılan→özdeş SFP) ile "native
+  mimari" (özdeş→ASPP/GAP) katkıları ayrışır.
+- Opsiyonel: Faz 2'de **çözülen** backbone'da (LoRA) native neck etkisi farklı olabilir — orada tavan yok.
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum
