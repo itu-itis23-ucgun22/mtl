@@ -1,0 +1,50 @@
+# DINOv2 donuk + LR-ASPP seg neck — Faz 3 "bağlam vs maliyet" ablasyonunun HAFİF ucu.
+# Donuk DINOv2 (Deneme 7) ile TEK FARK: seg decoder = LR-ASPP (MobileNetV3, hafif global bağlam).
+# ASPP config'inin (train_colab_dinov2_segaspp.yaml) kardeşi -> ikisini + FCN baseline'ı kıyasla.
+#
+#   Üç nokta:  FCN (bağlam yok, 0.601) · LR-ASPP (hafif global) · ASPP (ağır çok-ölçek)
+#   Soru: "Hafif global bağlam (LR-ASPP), full çok-ölçek (ASPP) kadar seg'e yardım eder mi,
+#          çok daha ucuza?" -> doğrudan FPS/efficiency hikâyesine bağlanır.
+#   Feature-caching (donuk trunk aynı) — ucuz (~15-20 dk; LR-ASPP dilated conv YOK, ASPP'den hafif).
+#     python scripts/precompute_features.py --config configs/train_colab_dinov2_seglraspp.yaml --split train
+#     python scripts/precompute_features.py --config configs/train_colab_dinov2_seglraspp.yaml --split val
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_seglraspp.yaml --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_seglraspp.yaml \
+#            --checkpoint checkpoints/colab_dinov2_seglraspp_cached_epoch15.pt
+#
+# NOT: LR-ASPP low="0"(stride4) + high="2"(stride16) kullanır; yalnız seg head'i etkiler (det/cls aynı).
+# Trunk aynı -> istersen --features-dir features/colab_dinov2/train ile precompute'u paylaş/atla.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: lraspp        # <-- hafif görev-özel seg decoder (LR-ASPP)
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_seglraspp
+  checkpoint_every_steps: 500

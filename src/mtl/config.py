@@ -31,8 +31,10 @@ class ModelConfig:
     trainable_backbone_layers: int = 3
     cls_head_tap: str = "fpn_p5"  # or "backbone_body"
     # --- Görev-özel neck (Faz 3 ablasyon ekseni) ---
-    # Segmentation decoder: "fcn" (VARSAYILAN; tüm mevcut sonuçlar bununla) |
-    # "aspp" (Atrous Spatial Pyramid Pooling, DeepLabv3 — çok-ölçekli bağlam, ViT-uyumlu).
+    # Segmentation decoder — "bağlam vs maliyet" ablasyonu:
+    #   "fcn"    = düz FCN (VARSAYILAN; tüm mevcut sonuçlar bununla), bağlam yok
+    #   "aspp"   = ASPP/DeepLabv3, çok-ölçekli bağlam (ağır)
+    #   "lraspp" = LR-ASPP/MobileNetV3, hafif global bağlam (ucuz, edge-dostu)
     seg_neck: str = "fcn"
     # --- LoRA (Faz 2 adaptasyon ekseni; yalnız ViT gövdeli backbone'lar) ---
     lora: bool = False              # True: ViT gövdesine LoRA adaptörleri tak (taban donuk kalır)

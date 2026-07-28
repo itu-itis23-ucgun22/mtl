@@ -68,24 +68,69 @@ class ASPP(nn.Module):
         return self.project(torch.cat(feats, dim=1))
 
 
-class SemanticSegHead(nn.Module):
-    """FPN level "0" -> decoder -> tam çözünürlüğe upsample.
+class LRASPP(nn.Module):
+    """Lite Reduced ASPP (MobileNetV3, Howard et al. 2019) — HAFİF seg neck.
 
-    seg_neck: "fcn" (düz FCN, varsayılan) | "aspp" (görev-özel çok-ölçekli bağlam).
+    ASPP'nin pahalı dilated 3x3 conv'larını ATAR; yerine ucuz **global-bağlam attention kapısı** +
+    düşük-seviye skip koyar. Yalnız 1x1 conv + pooling -> edge/mobil için tasarlanmış, çok ucuz.
+      high (kaba, stride 16): 1x1 conv (cbr) × global-pool-sigmoid (attention gate) -> upsample
+      low  (ince, stride 4) : 1x1 skip
+      logits = high_classifier(gated) + low_classifier(low)
+    Küçük batch için GroupNorm (BatchNorm yerine). Çok-ÖLÇEK yok (sadece global+yerel) -> ASPP'den
+    daha az bağlam, çok daha ucuz. "Bağlam vs maliyet" ablasyonunun hafif ucu.
     """
+
+    def __init__(self, low_ch: int, high_ch: int, num_classes: int, inter_ch: int = 128):
+        super().__init__()
+        self.cbr = nn.Sequential(
+            nn.Conv2d(high_ch, inter_ch, 1, bias=False),
+            nn.GroupNorm(32, inter_ch),
+            nn.ReLU(inplace=True),
+        )
+        self.scale = nn.Sequential(  # global-bağlam attention (kanal geçidi)
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(high_ch, inter_ch, 1, bias=False),
+            nn.Sigmoid(),
+        )
+        self.low_classifier = nn.Conv2d(low_ch, num_classes, 1)
+        self.high_classifier = nn.Conv2d(inter_ch, num_classes, 1)
+
+    def forward(self, low: Tensor, high: Tensor) -> Tensor:
+        x = self.cbr(high) * self.scale(high)  # global bağlamla geçitle
+        x = F.interpolate(x, size=low.shape[-2:], mode="bilinear", align_corners=False)
+        return self.low_classifier(low) + self.high_classifier(x)
+
+
+class SemanticSegHead(nn.Module):
+    """FPN seviyelerinden decoder -> tam çözünürlüğe upsample.
+
+    seg_neck:
+      "fcn"    - düz FCN (varsayılan; level "0").
+      "aspp"   - çok-ölçekli bağlam, ağır (level "0").
+      "lraspp" - hafif global-bağlam + skip (low="0" stride4, high="2" stride16).
+    """
+
+    LRASPP_LOW = "0"   # stride 4 (ince detay skip)
+    LRASPP_HIGH = "2"  # stride 16 (kaba bağlam; global-pool burada ucuz)
 
     def __init__(self, in_channels: int, num_classes: int, neck: str = "fcn"):
         super().__init__()
+        self.neck = neck
         if neck == "aspp":
             self.decoder = nn.Sequential(
                 ASPP(in_channels, out_ch=256),
                 nn.Conv2d(256, num_classes, kernel_size=1),
             )
+        elif neck == "lraspp":
+            self.decoder = LRASPP(in_channels, in_channels, num_classes)
         elif neck == "fcn":
             self.decoder = FCNHead(in_channels, num_classes)
         else:
-            raise NotImplementedError(f"seg_neck '{neck}' bilinmiyor. Desteklenen: 'fcn', 'aspp'.")
+            raise NotImplementedError(f"seg_neck '{neck}' bilinmiyor. Desteklenen: 'fcn', 'aspp', 'lraspp'.")
 
     def forward(self, features: Dict[str, Tensor], output_size: tuple) -> Tensor:
-        x = self.decoder(features[FPN_TAP_LEVEL])
+        if self.neck == "lraspp":
+            x = self.decoder(features[self.LRASPP_LOW], features[self.LRASPP_HIGH])
+        else:
+            x = self.decoder(features[FPN_TAP_LEVEL])
         return F.interpolate(x, size=output_size, mode="bilinear", align_corners=False)
