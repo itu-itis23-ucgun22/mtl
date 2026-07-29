@@ -669,7 +669,10 @@ native neck'lerin ekstra parametresi head tarafında, bu ölçümde görünmez.)
 ### 🎯 Bulgu — donuk-tavanda anlamlı kazanç YOK (ROADMAP tahmini doğrulandı)
 Farklar ±1% bandında; net etki küçük bir **yeniden-dağıtım** (cls hafif ↑, det/seg hafif ↓). ROADMAP'in
 "donuk DINOv2 zaten tavana yakın (seg 0.60) → ölçülebilir kazanç çıkmayabilir; **negatif de geçerli bulgu**"
-beklentisi tuttu. Üç mekanizma, hepsi tutarlı:
+beklentisi tuttu. ⚠️ **Kesinlik notu:** "tavan" **seg/cls'e özel** (LoRA seg +%0.4, tavan). **Detection'da
+tavan YOK** — DINOv2+LoRA det **+%16** (headroom var). O yüzden task_native'in det'i oynatmaması "tavan"dan
+değil; **neck detection'ın kaldıracı değil (ViTDet: det fine-tune ister).** Yani det-null ≠ seg-tavan, iki
+farklı sebep. Üç mekanizma, hepsi tutarlı:
 1. **cls +%1.9 (tek pozitif sinyal, temiz mekanizma):** native cls neck GAP'i **ham 768-d trunk'a** uygular;
    baseline SFP trunk'ı **256-kanala + stride-32'ye sıkıştırıp** öyle pool'lar → sıkıştırılmamış zengin
    feature görüntü-sınıflandırmaya küçük ama tutarlı fayda. Beklenen yönde.
@@ -729,6 +732,11 @@ açtı. +%43 küçük bir rötuş değil, **kalitatif sıçrama** (det/cls sabit
 soyağacı (SPP/PPM/ASPP; YOLOP + PSPNet + DeepLab) bu görevde **conv omurgada işe yarıyor, donuk ViT'te
 tavan varken yaramıyor.** Faz 2 LoRA yasasıyla aynı melodi: **headroom'u olan en çok kazanır.**
 
+⚠️ **YOLOP çelişkisi değil — baseline farkı:** YOLOP "seg dalına ekstra SPP eklemek yardım etmedi" der; biz
+ASPP'den +%43 aldık. Çelişmiyor, çünkü **baseline'lar farklı:** YOLOP'un neck'inde **zaten SPP (bağlam) vardı**
+→ üstüne eklemek marjinal. Bizim ResNet seg baseline'ımız **düz FCN (bağlam YOK)** → **ilk** bağlam modülü (ASPP)
+büyük fark yarattı. Kural: "ekstra bağlam" ≠ "ilk bağlam"; bağlam-yoksunu bir decoder'a ilk kez eklemek uçurur.
+
 ### ⚠️ Teze dürüst caveat (önemli — rafine ediyor, çürütmüyor)
 Bu, Faz 1 seg **sıralamasının kısmen bir DECODER artefaktı** olduğunu gösteriyor, saf pretraining-sinyali
 değil. ResNet+ASPP seg 0.46 → tüm ViT'lerin (DINOv1/CLIP/DeiT/I-JEPA) üstünde, **2.** (yalnız DINOv2 0.60
@@ -742,6 +750,106 @@ altında). ResNet "seg-zayıf" görünüyordu çünkü FCN conv feature'ını s�
   "bağlam-vs-maliyet" merdiveni: +%43 ağır ASPP'den mi hafif global-bağlamdan mı? Verimlilik motivasyonuna
   (kısıtlı platform, ResNet=verimlilik kralı) doğrudan bağlanır.
 - Sonra konsolidasyon (test-seti final sayıları + figürler).
+
+---
+
+## Deneme 19 — 2026-07-29 — 🔬 FAZ 3: DINOv2 çok-katmanlı aggregation → ZARAR (seg çöktü); "ViT derinliği CNN değil"
+
+### Kurulum
+- `configs/train_colab_dinov2_multilayer.yaml`: donuk DINOv2 baseline (RESULTS satır 9, Deneme 7:
+  det 0.2300 / seg 0.6011) ile **tek fark**: SFP'yi son katmanın tek grid'inden türetmek yerine
+  **N farklı derinlikten** feature al. ⚠️ **Bu gerçek DPT DEĞİL — kaba bir PROXY**: her seviye tek katmandan
+  beslenir, **füzyon YOK** (gerçek DPT katmanları füze eder; bkz. Bulgu §2). `multilayer_taps=2`
+  → `get_intermediate_layers` ile bloklar **{5 (mid), 11 (son)}**; piramit seviyeleri derinliğe göre:
+  **level 0,1 ← blok 5 (mid)**, **level 2,3 ← blok 11 (son)**.
+- Cache'siz (`train.py`, resume'lu) koşuldu — cache formatı değişeceği + oturum kırılganlığı nedeniyle
+  (bkz. cache tartışması: multilayer cache ~94 GB, resume edilemez). Aksi her şey baseline ile birebir.
+
+### Sonuç — baseline (satır 9) vs multilayer (tek değişken: katman kaynağı)
+
+| metrik | baseline (satır 9) | multilayer (taps=2) | delta |
+|---|---|---|---|
+| detection_mAP | 0.2300 | 0.2031 | **−11.7%** |
+| seg_mIoU | 0.6011 | **0.2882** | **−52% (ÇÖKTÜ)** |
+| cls_mAP | 0.7800 | 0.7787 | ≈sabit |
+| cls_F1 | 0.7239 | 0.7320 | +1.1% |
+| small-obj AP | 0.036 | **0.012** | **−67%** |
+
+(COCO: AP@0.50=0.348, AP@0.75=0.208; small 0.012 / medium 0.219 / large 0.417.)
+
+### 🎯 Bulgu — çok-katmanlı aggregation donuk DINOv2'de ZARAR verdi; mekanizma net
+
+**Hangi head hangi katmanı okudu → sonuç (mekanizmanın kesin kanıtı):**
+
+| head | okuduğu level ← katman | sonuç | yorum |
+|---|---|---|---|
+| **cls** | "3" ← **son (blok 11)** | **0.78 SABİT** | girdisi hiç değişmedi → **kontrol grubu** |
+| **seg** | "0" ← **mid (blok 5)** | **0.60 → 0.29** | saf per-piksel semantik + kritik seviyesi mid katmanı aldı |
+| **det** | tüm seviyeler (karışık) | −%12 | bazı seviye son, bazı mid → orta düşüş |
+
+**cls'in TAM sabit kalması** mekanizmayı kanıtlıyor: cls'in girdisi (son katman) değişmedi → çıktısı
+değişmedi. Ne mid katmanı okuduysa o bozuldu.
+
+### 🧠 Neden böyle oldu — dört katmanlı mekanik açıklama
+
+**1. ViT'in derinliği ≠ CNN'in derinliği (kök yanlış).** CNN'de derinlikle çözünürlük VE semantik
+birlikte değişir (erken=yüksek-çöz./düşük-seviye, geç=düşük-çöz./yüksek-semantik) → FPN farklı aşamaları
+tapler çünkü erken aşama gerçekten daha yüksek çözünürlüklü detay taşır. **ViT'te bu yok:** her katman
+**aynı çözünürlükte** (stride 16, 37×37, hiç downsample yok). "Mid katman" son katmandan daha yüksek-çöz.
+DEĞİL — aynı grid, sadece **semantik olarak daha ham.** Mid'i "ince seviye"ye verip up4 ile ×4 upsample
+etmek ekstra detay üretmez, ham feature'ı daha çok piksele yayar. CNN'den ödünç "erken=detay" sezgisi
+**kategori hatası.**
+
+**2. DINOv2 semantiği SON katmanda yoğunlaşır.** DINOv2 self-distillation + iBOT kaybını **çıktıda (son
+katman)** uygular → ağ son katmanın token'ları maksimum semantik-ayırt edici olacak şekilde optimize
+edilir. Ara katmanlar objektifin ödüllendirdiği temsile **henüz varmamış** (semantik derinlikle monotonik
+güçlenir). DINOv2'nin kendi dense reçetesi de **son-N** katmanı kullanır, ortadan değil.
+
+**2. ⚠️ ASIL SEBEP — gerçek DPT'yi YAPMADIK, kaba bir proxy yaptık.** İki ölümcül sapma:
+- **(a) Partition, füzyon DEĞİL (en kritik).** DPT'nin özü "Reassemble + **Fuse**": seçilen katmanları alıp
+  HER çıktıya hepsinin **birleşimini** verir (RefineNet füzyon blokları) → seg'in ince çıktısı son katmanın
+  semantiğini DE görür. Biz **böldük:** seg'in level 0'ı **yalnız blok 5'i** gördü, son katmandan **tamamen
+  koptu.** Gerçek DPT mid+son'u füze etseydi seg semantik son katmanı içeride tutardı → çökmezdi.
+- **(b) Yanlış katman.** Eşit-aralıklı tap → blok **5** (fazla erken/ham); DINOv2 & DPT **son-N** (8-11) kullanır.
+
+→ Çöküş **bizim kaba implementasyonumuzdan**, "DPT/multilayer DINOv2'de kötü"den DEĞİL.
+
+**3. Donuk kısıt İKİNCİL — öldürücü DEĞİL (önceki iddia DÜZELTİLDİ).** İlk yazdığım *"donuk bunu öldürür"*
+**yanlıştı**: **donuk DINOv2 + GERÇEK DPT çalışır** — DINOv2'nin kendi makalesi donuk feature + DPT decoder ile
+güçlü depth/seg verir. Donuk'un rolü yalnızca şu: kötü routing'i gradyanla **düzeltemedik**; ama düzgün donuk
+DPT zaten kötü routing (füzyonsuz + erken katman) yapmazdı. Yani suçlu **"donuk" değil, (2)'deki kaba proxy.**
+
+**4. Seg neden EN ÇOK.** Semantik seg = saf per-piksel sınıflandırma; her token "burada ne var" semantiği
+taşımalı. Mid-katman token'ında temiz sınıf-ayrımı henüz oluşmamış → seg yarım-pişmiş feature'dan piksel
+sınıflandırmaya çalışıp çöktü. Det localization+çok-seviye (bazısı iyi son-katmandan) → sadece kısmen düştü.
+En çarpıcı: small-obj AP 0.036→0.012 → "erken katman küçük nesneye yarar" (CNN sezgisi) da **çürüdü**;
+DINOv2'de son katman small dahil her şeyde daha iyi.
+
+### 🎯 Sonuç ne demeli
+Bulgu şu **DEĞİL:** "multi-layer / DPT DINOv2'de kötü." Bulgu şu: **"seviyeleri tek tek erken katmanlara bölmek
+(füzyonsuz + yanlış katmanlarla) kötü"** — yani **bizim kaba proxy'miz** kötü, yöntem değil. Yine de iki kalıcı
+ders kalıyor: (1) **ViT'te erken katman detay değil, ham-semantik** → CNN "erken=detay" sezgisi çürür; (2) **donuk
+ViT'te füzyonsuz partition, seg'i son-katman semantiğinden koparır.** Gerçek DPT (son-N katman + füzyon + DPT
+decoder) donuk DINOv2'de bile çalışır (DINOv2 sonuçları) → **future work.** ViTDet'in "yalnız son katman + basit
+SFP" tercihini de dolaylı doğrular: basit yolda son katman baskın, oynatmak kolayca zarar verir.
+
+### ⚠️ Metodolojik dürüstlük — implementasyon eksiği (bize ait)
+Bu koşu **gerçek DPT değil, kaba bir proxy** test etti; çöküş kısmen bu eksiğin ürünü. Doğru olan ya DPT füzyonunu
+kodlamak ya da "bu basitleştirme kendi başına çöküşe yol açabilir" diye **koşmadan önce** uyarmaktı — ikisi de
+yapılmadı. Kayıt bu yüzden "yöntem kötü" değil "**bizim proxy'miz + katman seçimi kötü**" diye okunmalı.
+
+### Tutarlı DINOv2 Faz 3 hikâyesi (dürüst kanıt-gücü ile)
+Donuk DINOv2'de neck/loss oynatmak **seg/cls'i** iyileştirmiyor — ama kanıt ayakları eşit güçte DEĞİL:
+- **İki TEMİZ ayak:** task-native (Deneme 17) ~düz · adaptif loss (Deneme 16) yeniden-dağıtım. İkisi de
+  tek-değişken, confound'suz → "seg/cls tavanı" için sağlam kanıt.
+- **Bir CONFOUNDED ayak:** multilayer (Deneme 19) zarar verdi — ama çöküş **proxy kusurundan** (füzyonsuz +
+  erken katman), "neck oynatmak zarar"dan değil. → Bu ayağı "DINOv2 neck-invariance" kanıtı olarak **kullanma**;
+  gerçek DPT farklı olabilir.
+
+⚠️ **"Tavan" seg/cls'e özel, det'e DEĞİL:** DINOv2+LoRA det +%16 (headroom var) — det'te neck yardım etmiyor
+çünkü kaldıraç fine-tuning (ViTDet), tavan değil. Kontrast: **ResNet'te** ASPP uçurdu (+%43, Deneme 18) —
+seg'de tavanda değil + conv feature bağlam-modülüne aç. **Genel:** donuk DINOv2'nin **seg/cls'i** son-katman
+baskınlığıyla tavana yakın; **det'in** açığı ise mimari-neck değil adaptasyon eksikliği.
 
 ---
 
