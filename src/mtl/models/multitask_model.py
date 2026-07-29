@@ -47,9 +47,13 @@ class MultiTaskModel(nn.Module):
         adaptive_loss: bool = False,   # Faz 3: öğrenilen belirsizlik ağırlıkları (Kendall 2018)
         seg_neck: str = "fcn",         # Faz 3: seg decoder "fcn" | "aspp" | "lraspp"
         neck_mode: str = "shared",     # Faz 3: "shared" | "per_task_identical" | "task_native"
+        det_neck: str = "fpn",         # Faz 3: detection neck "fpn" | "pan" (bottom-up PAN)
+        multilayer_taps: int = 0,      # Faz 3: DINOv2 çok-katmanlı aggregation (0=off)
     ):
         super().__init__()
-        self.backbone = build_backbone(backbone_name, pretrained, trainable_backbone_layers)
+        self.backbone = build_backbone(
+            backbone_name, pretrained, trainable_backbone_layers, multilayer_taps=multilayer_taps
+        )
         if lora:
             # ViT gövdesine LoRA adaptörleri tak (taban donuk kalır). Cache KULLANILAMAZ →
             # normal scripts/train.py ile koş (bkz. models/lora.py, ROADMAP Faz 2).
@@ -117,6 +121,16 @@ class MultiTaskModel(nn.Module):
         if neck_mode == "per_task_identical":
             self.seg_neck = SimpleFeaturePyramid(embed_dim, FPN_OUT_CHANNELS)
             self.cls_neck = SimpleFeaturePyramid(embed_dim, FPN_OUT_CHANNELS)
+        # Detection neck PAN (Faz 3): base piramidin ÜSTÜNE bottom-up yol, YALNIZ detection'a
+        # (_run_heads'te feats_det'e uygulanır; seg/cls base neck'i okur). Backbone-agnostik (FPN/SFP).
+        if det_neck not in ("fpn", "pan"):
+            raise ValueError(f"det_neck '{det_neck}' bilinmiyor. Desteklenen: 'fpn', 'pan'.")
+        self.det_pan = None
+        if det_neck == "pan":
+            from mtl.models.pan import PANNeck
+
+            self.det_pan = PANNeck(FPN_OUT_CHANNELS)
+
         # Faz 3: adaptif loss ağırlıklandırıcı (alt-modül → params optimizer'a + checkpoint'e otomatik girer)
         self.loss_weighter = None
         if adaptive_loss:
@@ -170,6 +184,10 @@ class MultiTaskModel(nn.Module):
         """(feats_det, feats_seg, feats_cls) -> üç head. Paylaşılan modda üçü de aynı dict'tir;
         task-specific modda her görev kendi neck çıktısını alır. forward/forward_from_trunk ortak yolu."""
         feats_det, feats_seg, feats_cls = features_per_task
+        # Detection neck PAN: yalnız detection dict'ine bottom-up yol. Yeni dict döner → paylaşılan
+        # modda feats_seg/feats_cls (aynı base dict) etkilenmez. seg/cls base neck'i okumaya devam eder.
+        if self.det_pan is not None:
+            feats_det = self.det_pan(feats_det)
         height, width = image_hw
         features_list = list(feats_det.values())
         batch_size = features_list[0].shape[0]

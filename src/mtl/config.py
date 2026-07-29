@@ -30,6 +30,14 @@ class ModelConfig:
     pretrained: bool = True
     trainable_backbone_layers: int = 3
     cls_head_tap: str = "fpn_p5"  # or "backbone_body"
+    # Detection neck (Faz 3): "fpn" = base piramit (FPN/SFP) doğrudan RetinaNet'e (VARSAYILAN, mevcut).
+    #   "pan" = base piramidin ÜSTÜNE bottom-up PAN yolu (PANet/YOLOP), yalnız DETECTION yoluna;
+    #   seg/cls base neck'i okumaya devam eder. det_mAP kaldıracı (ResNet FPN'de kanonik).
+    det_neck: str = "fpn"
+    # ViT çok-katmanlı feature aggregation (Faz 3, yalnız DINOv2): 0 = son katman tek grid (VARSAYILAN).
+    #   2/3/4 = N transformer bloğundan (farklı derinlik) feature al, piramit seviyelerine derinliğe
+    #   göre dağıt (erken=ince/yerel, geç=kaba/semantik; DPT/SETR-MLA tarzı). ⚠️ cache N× büyür.
+    multilayer_taps: int = 0
     # --- Görev-özel neck (Faz 3 ablasyon ekseni) ---
     # Segmentation decoder — "bağlam vs maliyet" ablasyonu:
     #   "fcn"    = düz FCN (VARSAYILAN; tüm mevcut sonuçlar bununla), bağlam yok

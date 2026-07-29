@@ -1,0 +1,61 @@
+# DINOv2 donuk + ÇOK-KATMANLI feature aggregation — Faz 3 "ViT tek-katman darboğazını aç".
+# Baseline donuk DINOv2 (RESULTS satır 9: det 0.2300 / seg 0.6011) ile TEK FARK: son katman tek grid
+# yerine N farklı DERİNLİKTEN feature (DPT/SETR-MLA tarzı). Piramit seviyeleri derinliğe göre beslenir:
+# ince/yüksek-çöz. seviyeler ERKEN katmandan (yerel/detay → küçük nesne), kaba seviyeler GEÇ katmandan
+# (semantik). ViT'in "çok-ölçek" karşılığı çok-derinlik; PAN'ın (ResNet) ViT-uygun muadili.
+#
+#   Soru: "DINOv2 detection açığı (özellikle small AP 0.036) tek-katman feature'dan mı? Farklı
+#          derinlikleri birleştirmek dense/detection'ı çeker mi?"
+#   multilayer_taps=2 → bloklar {mid, last}; level 0,1←mid, level 2,3←last. (taps=4 daha geniş
+#   derinlik yelpazesi ama cache 2× daha büyür — aşağıdaki DİSK notuna bak.)
+#
+# ⚠️ CACHE FORMATI DEĞİŞİR → baseline DINOv2 cache'i KULLANILAMAZ, kendi precompute'u gerekir.
+#    Trunk (N*768, 37, 37) → taps=2'de ~2×, taps=4'te ~4× tek-katman boyutu.
+#    ViT-B @518 tek-katman ~47 GB/22.5k → taps=2 ≈ 94 GB. /content'e sığmazsa:
+#      (a) taps=4 yerine 2 kullan (bu config zaten 2),
+#      (b) PROTOTIP: --overrides data.n_images=5000 ile küçük sinyal koşusu (~21 GB),
+#      (c) DİSK yerine GPU harca: cache YOK, doğrudan train.py (ViT her adım forward, yavaş).
+#
+# CACHE'Lİ akış (disk yeterse):
+#   python scripts/precompute_features.py --config configs/train_colab_dinov2_multilayer.yaml --split train
+#   python scripts/train_cached.py --config configs/train_colab_dinov2_multilayer.yaml --no-amp
+#   python scripts/eval.py --config configs/train_colab_dinov2_multilayer.yaml \
+#          --checkpoint checkpoints/colab_dinov2_multilayer_cached_epoch15.pt
+# CACHE'SİZ alternatif (disk azsa, GPU harca):
+#   python scripts/train.py --config configs/train_colab_dinov2_multilayer.yaml
+#   python scripts/eval.py  --config configs/train_colab_dinov2_multilayer.yaml \
+#          --checkpoint checkpoints/colab_dinov2_multilayer_epoch15.pt
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  multilayer_taps: 2         # <-- TEK FARK: 2 derinlikten feature (mid+last). 4 = daha zengin/2× disk
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_multilayer
+  checkpoint_every_steps: 500

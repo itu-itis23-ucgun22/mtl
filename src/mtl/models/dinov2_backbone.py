@@ -63,6 +63,7 @@ class Dinov2Backbone(nn.Module):
         pretrained: bool = True,
         trainable_blocks: int = 0,
         out_channels: int = OUT_CHANNELS,
+        multilayer_taps: int = 0,
     ):
         super().__init__()
         if model_name not in DINOV2_MODELS:
@@ -79,6 +80,17 @@ class Dinov2Backbone(nn.Module):
         self.num_prefix_tokens = self.vit.num_prefix_tokens  # CLS + register token(lar)ı atmak için
         embed_dim = self.vit.embed_dim  # ViT-S: 384, ViT-B: 768
         self.out_channels = out_channels
+
+        # Çok-katmanlı feature aggregation (Faz 3): son katman yerine N farklı derinlikten grid al.
+        # tap_indices: derinlik boyunca eşit aralıklı bloklar (erken→geç). level_tap: 4 piramit
+        # seviyesini (0..3) N tap'e derinliğe göre dağıtır (ince level ← erken/yerel, kaba ← geç/semantik).
+        self.multilayer_taps = multilayer_taps
+        if multilayer_taps > 0:
+            depth = len(self.vit.blocks)
+            self._tap_indices = tuple(
+                round(depth * (k + 1) / multilayer_taps) - 1 for k in range(multilayer_taps)
+            )
+            self._level_tap = [round(i * (multilayer_taps - 1) / 3) for i in range(4)]
 
         self._set_trainable_blocks(trainable_blocks)
 
@@ -121,15 +133,32 @@ class Dinov2Backbone(nn.Module):
 
     def trunk_forward(self, images: Tensor) -> Tensor:
         """DONUK ViT gövdesinin çıktısı: (B, embed, h, w) grid. Feature-caching için ayrıldı
-        (bkz. dino_backbone.py trunk_forward + scripts/precompute_features.py)."""
+        (bkz. dino_backbone.py trunk_forward + scripts/precompute_features.py).
+
+        multilayer_taps>0 ise N farklı bloktan grid alınıp KANALDA concat edilir -> (B, N*embed, h, w).
+        Böylece cache formatı yine rank-4 (C,h,w) kalır (precompute/cached_features değişmez); neck_forward
+        kanalları geri böler. get_intermediate_layers prefix (CLS+register) token'larını kendi atar."""
+        if self.multilayer_taps > 0:
+            grids = self.vit.get_intermediate_layers(
+                images, n=self._tap_indices, reshape=True, norm=True
+            )  # tuple: N × (B, embed, h, w)
+            return torch.cat(grids, dim=1)  # (B, N*embed, h, w)
         return self._tokens_to_grid(images)
 
     def neck_forward(self, x: Tensor) -> Dict[str, Tensor]:
-        """EĞİTİLEBİLİR neck (Simple Feature Pyramid): trunk grid -> 5-seviye piramit."""
-        p0 = self.out0(self.up4(x))                               # stride 4
-        p1 = self.out1(self.up2(x))                               # stride 8
-        p2 = self.out2(x)                                         # stride 16
-        p3 = self.out3(F.max_pool2d(x, kernel_size=2, stride=2))  # stride 32
+        """EĞİTİLEBİLİR neck (Simple Feature Pyramid): trunk grid -> 5-seviye piramit.
+
+        multilayer_taps>0 ise x (B, N*embed, h, w) kanalda N katmana bölünür; her piramit seviyesi
+        derinliğe göre atanan katmandan beslenir (self._level_tap). Tek-katmanda dördü de aynı grid."""
+        if self.multilayer_taps > 0:
+            layers = x.chunk(self.multilayer_taps, dim=1)  # N × (B, embed, h, w)
+            xs = [layers[self._level_tap[i]] for i in range(4)]
+        else:
+            xs = [x, x, x, x]
+        p0 = self.out0(self.up4(xs[0]))                               # stride 4  (ince ← erken katman)
+        p1 = self.out1(self.up2(xs[1]))                              # stride 8
+        p2 = self.out2(xs[2])                                        # stride 16
+        p3 = self.out3(F.max_pool2d(xs[3], kernel_size=2, stride=2))  # stride 32 (kaba ← geç katman)
         # "pool": torchvision LastLevelMaxPool ile aynı (stride 64) - RetinaNet 5 seviye ister
         pool = F.max_pool2d(p3, kernel_size=1, stride=2, padding=0)
         return OrderedDict([("0", p0), ("1", p1), ("2", p2), ("3", p3), ("pool", pool)])

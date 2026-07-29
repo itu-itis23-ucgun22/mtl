@@ -1,0 +1,50 @@
+# Donuk ResNet50 + seg=ASPP + det=PAN — Faz 3 "detection zayıflığı: neck mi feature mi?"
+# ResNet+ASPP (RESULTS satır 20: seg 0.4606, det 0.1923) ile TEK FARK det_neck=pan (FPN üstüne
+# bottom-up PAN yolu, yalnız detection'a). seg=aspp SABİT tutuldu ki det kıyası tek-değişken olsun
+# (seg decoder paylaşılan FPN'e gradyan akıtır → seg'i sabit tutmazsak det'i dolaylı etkiler).
+#
+#   Soru: "Detection her backbone'da en zayıf görev. ResNet'te zayıflık DECODER/NECK mi (FPN'de
+#          bottom-up lokalizasyon yolu yok) yoksa FEATURE mi?" — ASPP'nin seg için sorduğunun det ikizi.
+#   PAN = FPN+bottom-up (PANet/YOLOP), conv piramidinde kanonik. det_mAP'e bak (kıyas satır 20: 0.1923).
+#     PAN belirgin çekerse → det zayıflığı kısmen NECK'miş (ASPP'nin seg'de yaptığı gibi).
+#     ~düz kalırsa        → det zayıflığı feature/head'de; neck çözmüyor.
+#
+# ResNet donuk → cache YOK, normal train.py, amp=false (Deneme 6 NaN önlemi).
+#   python scripts/train.py --config configs/train_colab_resnet_frozen_segaspp_detpan.yaml
+#   python scripts/eval.py  --config configs/train_colab_resnet_frozen_segaspp_detpan.yaml \
+#          --checkpoint checkpoints/colab_resnet_frozen_segaspp_detpan_epoch15.pt
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: resnet50
+  pretrained: true
+  trainable_backbone_layers: 0
+  seg_neck: aspp             # satır 20 ile aynı (det kıyası tek-değişken olsun diye sabit)
+  det_neck: pan             # <-- TEK FARK: FPN üstüne bottom-up PAN, yalnız detection'a
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: false
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_resnet_frozen_segaspp_detpan
+  checkpoint_every_steps: 500

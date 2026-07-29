@@ -57,7 +57,8 @@ def main() -> None:
     )
 
     backbone = build_backbone(
-        cfg.model.backbone_name, pretrained=cfg.model.pretrained, trainable_layers=0
+        cfg.model.backbone_name, pretrained=cfg.model.pretrained, trainable_layers=0,
+        multilayer_taps=cfg.model.multilayer_taps,
     ).to(device)
     backbone.eval()
     if not hasattr(backbone, "trunk_forward"):

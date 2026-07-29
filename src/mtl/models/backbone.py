@@ -34,6 +34,7 @@ def build_backbone(
     name: str = "resnet50",
     pretrained: bool = True,
     trainable_layers: int = 3,
+    multilayer_taps: int = 0,
 ) -> nn.Module:
     """`.out_channels=256` özniteliği olan ve 5-seviyeli feature dict döndüren bir omurga kur.
 
@@ -44,6 +45,13 @@ def build_backbone(
       - dino* (DINOv1/DINOv2): eğitilebilir transformer bloğu sayısı (sondan). 0 = ViT tamamen
         donuk (kanonik SSL kullanımı; sadece neck+head'ler eğitilir), 12 = tüm ViT.
     """
+    # multilayer_taps yalnız DINOv2'de desteklenir (get_intermediate_layers'lı ViT); diğerlerinde hata.
+    if multilayer_taps and not name.startswith("dinov2"):
+        raise NotImplementedError(
+            f"multilayer_taps={multilayer_taps} yalnızca dinov2_* backbone'larda desteklenir "
+            f"(çok-katmanlı ViT aggregation); '{name}' için 0 olmalı."
+        )
+
     if name == "resnet50":
         weights = ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         return resnet_fpn_backbone(
@@ -58,7 +66,10 @@ def build_backbone(
     if name.startswith("dinov2"):
         from mtl.models.dinov2_backbone import Dinov2Backbone
 
-        return Dinov2Backbone(model_name=name, pretrained=pretrained, trainable_blocks=trainable_layers)
+        return Dinov2Backbone(
+            model_name=name, pretrained=pretrained, trainable_blocks=trainable_layers,
+            multilayer_taps=multilayer_taps,
+        )
 
     if name in ("dino_vitb16", "dino"):
         from mtl.models.dino_backbone import DinoBackbone
