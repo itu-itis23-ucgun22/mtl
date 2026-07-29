@@ -694,6 +694,57 @@ interference için `per_task_identical` (B: aynı SFP dağarcığı, tek değiş
 
 ---
 
+## Deneme 18 — 2026-07-29 — 🎯 FAZ 3: donuk ResNet + ASPP → "seg zayıflığı DECODER'mış, feature değil" (+%43)
+
+### Kurulum
+- `configs/train_colab_resnet_frozen_segaspp.yaml`: donuk ResNet baseline (RESULTS satır 8, Deneme 6:
+  seg 0.3215) ile **tek fark seg decoder** — FCN yerine **ASPP** (DeepLabv3). Diğer her şey birebir
+  (layers=0, batch=4, epochs=16, lr/wd/img512/seed/loss/aug). ResNet donuk gövde ucuz → **cache YOK**,
+  normal `train.py`, `amp=false` (Deneme 6 NaN önlemi). Arkadaşın workstation'ında koşuldu.
+
+### Sonuç — donuk ResNet: FCN (satır 8) vs ASPP (tek değişken: seg decoder)
+
+| metrik | ResNet+FCN (satır 8) | **ResNet+ASPP** | delta |
+|---|---|---|---|
+| detection_mAP | 0.1965 | 0.1923 | −2.1% (≈sabit; det FPN'i aynı) |
+| **seg_mIoU** | **0.3215** | **0.4606** | **+43.3%** 🚀 |
+| cls_mAP | 0.7084 | 0.7081 | ≈sabit |
+| cls_F1 | 0.6799 | 0.6882 | +1.2% |
+
+(COCO: AP large=0.298; AR small 0.135 / medium 0.405 / large 0.542. Verim workstation'da: 26.8M / 184 FPS
+/ 327 MB — A100 tablosuyla kıyaslanamaz, farklı donanım.)
+
+### 🎯 Bulgu — "decoder mı feature mı" sorusu net: **DECODER'mış**
+ResNet'in seg zayıflığı **feature semantiği değil, decoder eksikliğiymiş.** Donuk supervised ResNet
+feature'ı dense-semantiği **zaten taşıyor**; düz FCN çıkaramıyordu, ASPP'nin çok-ölçekli bağlamı kilidi
+açtı. +%43 küçük bir rötuş değil, **kalitatif sıçrama** (det/cls sabitken → saf seg-decoder etkisi).
+
+### 🎯 En çarpıcı: DINOv2 ile TAM ZIT (ASPP'nin faydası REJİME BAĞLI)
+- **DINOv2 + ASPP** (Deneme 17): 0.601 → 0.595, **yardım YOK** (tavan + ViT tek-grid'de ASPP awkward,
+  ×14 upsample sınır-kaba).
+- **ResNet + ASPP** (bu): 0.32 → 0.46, **devasa** (headroom var + **DeepLab = ResNet+ASPP** kanonik conv
+  eşleşmesi; dilated conv'lar conv hiyerarşisine oturur).
+
+→ ASPP'nin faydası mutlak değil, **conv + headroom + ASPP-dostu mimari** koşuluna bağlı. Bağlam-modülü
+soyağacı (SPP/PPM/ASPP; YOLOP + PSPNet + DeepLab) bu görevde **conv omurgada işe yarıyor, donuk ViT'te
+tavan varken yaramıyor.** Faz 2 LoRA yasasıyla aynı melodi: **headroom'u olan en çok kazanır.**
+
+### ⚠️ Teze dürüst caveat (önemli — rafine ediyor, çürütmüyor)
+Bu, Faz 1 seg **sıralamasının kısmen bir DECODER artefaktı** olduğunu gösteriyor, saf pretraining-sinyali
+değil. ResNet+ASPP seg 0.46 → tüm ViT'lerin (DINOv1/CLIP/DeiT/I-JEPA) üstünde, **2.** (yalnız DINOv2 0.60
+altında). ResNet "seg-zayıf" görünüyordu çünkü FCN conv feature'ını sömüremiyordu. → tez şöyle olgunlaşır:
+*"pretraining sinyali downstream'i öngörür — ama conv omurgalarda decoder bunu ciddi ölçüde perdeleyebilir."*
+- **Sağlam iddia:** ResNet-içi FCN→ASPP = **+%43** (tek değişken, kesin).
+- **Confound'lu iddia:** "seg'de 2. en iyi omurga" — diğerleri FCN'de, adil değil (herkese ASPP verilmeli).
+
+### Sonraki adım
+- **Tek ucuz yüksek-değer:** ResNet **lraspp** (cache yok, tek `train.py`) → `fcn 0.32 / lraspp ? / aspp 0.46`
+  "bağlam-vs-maliyet" merdiveni: +%43 ağır ASPP'den mi hafif global-bağlamdan mı? Verimlilik motivasyonuna
+  (kısıtlı platform, ResNet=verimlilik kralı) doğrudan bağlanır.
+- Sonra konsolidasyon (test-seti final sayıları + figürler).
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum
