@@ -49,6 +49,7 @@ class MultiTaskModel(nn.Module):
         neck_mode: str = "shared",     # Faz 3: "shared" | "per_task_identical" | "task_native"
         det_neck: str = "fpn",         # Faz 3: detection neck "fpn" | "pan" (bottom-up PAN)
         multilayer_taps: int = 0,      # Faz 3: DINOv2 çok-katmanlı aggregation (0=off)
+        det_box_loss: str = "l1",      # Faz 3: kutu regresyon loss'u "l1" | "smooth_l1" | "giou" | "ciou"
     ):
         super().__init__()
         self.backbone = build_backbone(
@@ -78,6 +79,13 @@ class MultiTaskModel(nn.Module):
             print(f"[lora] {n} Linear'a LoRA enjekte edildi "
                   f"(rank={lora_rank}, alpha={lora_alpha}, targets={lora_targets}, blocks={lora_blocks})")
         self.detection_model = build_detection_model(self.backbone, det_num_classes)
+        # Faz 3 det lever: RetinaNet regresyon head'inin kutu loss'unu değiştir (torchvision `_box_loss`
+        # ciou/giou destekler; decode edip IoU-tabanlı loss hesaplar). "l1" = default, dokunma.
+        if det_box_loss != "l1":
+            valid = ("l1", "smooth_l1", "giou", "ciou")
+            if det_box_loss not in valid:
+                raise ValueError(f"det_box_loss '{det_box_loss}' bilinmiyor. Desteklenen: {valid}.")
+            self.detection_model.head.regression_head._loss_type = det_box_loss
 
         # Faz 3 neck ekseni. "shared": tek paylaşılan SFP üç head'i besler (mevcut, tüm sonuçlar).
         # "per_task_identical": her göreve KENDİ (özdeş) SFP neck'i -> saf interference probu.

@@ -89,6 +89,7 @@ def main() -> None:
         neck_mode=cfg.model.neck_mode,
         det_neck=cfg.model.det_neck,
         multilayer_taps=cfg.model.multilayer_taps,
+        det_box_loss=cfg.model.det_box_loss,
     ).to(device)
 
     # Yalnızca gradyanı olan parametreler (neck + head'ler); donuk ViT güncellenmez.

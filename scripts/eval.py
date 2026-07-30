@@ -100,6 +100,7 @@ def main() -> None:
         neck_mode=cfg.model.neck_mode,  # checkpoint'teki det/seg/cls_neck + head kanal anahtarları uyuşsun
         det_neck=cfg.model.det_neck,          # PAN varsa det_pan anahtarları uyuşsun
         multilayer_taps=cfg.model.multilayer_taps,  # multilayer trunk/neck yapısı uyuşsun
+        det_box_loss=cfg.model.det_box_loss,  # regresyon head loss tipi (eval'de fark etmez ama tutarlı)
     ).to(device)
     step = load_checkpoint(model, optimizer=None, path=args.checkpoint, map_location=str(device))
 

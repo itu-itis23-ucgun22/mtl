@@ -65,6 +65,27 @@ def test_unknown_det_neck_rejected():
         MultiTaskModel(backbone_name="resnet50", pretrained=False, det_neck="bogus")
 
 
+def test_ciou_box_loss_wired():
+    """det_box_loss='ciou' RetinaNet regresyon head'inin loss tipini değiştirmeli + forward sonlu kalmalı."""
+    model = MultiTaskModel(
+        backbone_name="resnet50", pretrained=False,
+        det_num_classes=NUM_CLASSES, seg_num_classes=NUM_CLASSES + 1, cls_num_labels=NUM_CLASSES,
+        det_box_loss="ciou",
+    )
+    assert model.detection_model.head.regression_head._loss_type == "ciou"
+    model.train()
+    img = 128
+    loss_dict = model(torch.rand(2, 3, img, img), _targets(2, img))
+    assert set(loss_dict) == LOSS_KEYS
+    for k, v in loss_dict.items():
+        assert torch.isfinite(v), f"{k} sonlu değil"
+
+
+def test_unknown_det_box_loss_rejected():
+    with pytest.raises(ValueError):
+        MultiTaskModel(backbone_name="resnet50", pretrained=False, det_box_loss="bogus")
+
+
 # ---------------- Multilayer DINOv2 (timm gerekir) ----------------
 
 @pytest.mark.parametrize("taps", [2, 4])

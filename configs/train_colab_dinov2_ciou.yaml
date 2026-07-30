@@ -1,0 +1,49 @@
+# DINOv2 donuk + CIoU kutu loss — Faz 3 detection lever (loss tarafı).
+# Baseline donuk DINOv2 (RESULTS satır 9, Deneme 7: det 0.2300) ile TEK FARK: RetinaNet kutu regresyon
+# loss'u L1 yerine CIoU (Complete-IoU: örtüşme + merkez mesafesi + en-boy oranı). Koordinat-L1 yerine
+# mAP-hizalı → lokalizasyonu (AP@0.75) çeker. torchvision `_box_loss` ciou'yu destekler; sıfır ek kod.
+#
+#   Soru: "Detection açığının bir kısmı L1'in mAP-hizasız olmasından mı? CIoU lokalizasyonu çeker mi?"
+#   Kıyas: satır 9 (det 0.2300, L1). det_mAP + özellikle AP@0.75'e bak.
+#   Loss head'de, donuk trunk'ın ALTINDA → cache geçerli: baseline DINOv2 trunk cache'ini paylaş (precompute YOK).
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_ciou.yaml \
+#            --features-dir features/dinov2_trunk/train --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_ciou.yaml \
+#            --checkpoint checkpoints/colab_dinov2_ciou_cached_epoch15.pt
+#
+# NOT: det-upweight istersen ayrı eksen — loss.det_cls/det_box'ı büyüt (config değişikliği, kod yok).
+#      Ama tek-değişken CIoU testi için burada sabit 1/1/1/0.5 bırakıldı.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+  det_box_loss: ciou         # <-- TEK FARK: L1 yerine Complete-IoU kutu loss'u
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 1.0
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_ciou
+  checkpoint_every_steps: 500

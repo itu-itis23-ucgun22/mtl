@@ -34,6 +34,10 @@ class ModelConfig:
     #   "pan" = base piramidin ÜSTÜNE bottom-up PAN yolu (PANet/YOLOP), yalnız DETECTION yoluna;
     #   seg/cls base neck'i okumaya devam eder. det_mAP kaldıracı (ResNet FPN'de kanonik).
     det_neck: str = "fpn"
+    # Detection kutu regresyon loss'u (Faz 3 det lever): "l1" (RetinaNet default, mevcut) |
+    #   "smooth_l1" | "giou" | "ciou". CIoU (Complete-IoU): örtüşme + merkez mesafesi + en-boy oranı
+    #   → koordinat-L1 yerine mAP-hizalı; lokalizasyonu (AP@0.75) çeker. torchvision `_box_loss` destekler.
+    det_box_loss: str = "l1"
     # ViT çok-katmanlı feature aggregation (Faz 3, yalnız DINOv2): 0 = son katman tek grid (VARSAYILAN).
     #   2/3/4 = N transformer bloğundan (farklı derinlik) feature al, piramit seviyelerine derinliğe
     #   göre dağıt (erken=ince/yerel, geç=kaba/semantik; DPT/SETR-MLA tarzı). ⚠️ cache N× büyür.
