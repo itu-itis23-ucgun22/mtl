@@ -853,6 +853,57 @@ baskınlığıyla tavana yakın; **det'in** açığı ise mimari-neck değil ada
 
 ---
 
+## Deneme 20 — 2026-07-30 — 🎯 FAZ 3: donuk ResNet + PAN (det neck) → "det zayıflığı da kısmen NECK'miş" (+%6.4)
+
+### Kurulum
+- `configs/train_colab_resnet_frozen_segaspp_detpan.yaml`: ResNet+ASPP (RESULTS satır 20: det 0.1923,
+  seg 0.4606) ile **tek fark `det_neck=pan`** — FPN piramidinin ÜSTÜNE bottom-up PAN yolu (PANet/YOLOP),
+  yalnız detection'a. **seg=aspp SABİT tutuldu** ki det kıyası tek-değişken olsun (seg decoder paylaşılan
+  FPN'e gradyan akıtır → seg'i sabitlemezsek det'i dolaylı etkiler). ResNet donuk → cache YOK, `train.py`,
+  `amp=false`. PAN'ın seg için sorulanın (ASPP) **detection ikizi.**
+
+### Sonuç — ResNet+ASPP: det neck FPN (satır 20) vs PAN (tek değişken)
+
+| metrik | aspp+FPN (satır 20) | **aspp+PAN** | delta |
+|---|---|---|---|
+| **detection_mAP** | 0.1923 | **0.2047** | **+6.4%** 🚀 |
+| seg_mIoU | 0.4606 | 0.4664 | +1.3% (≈sabit) |
+| cls_mAP | 0.7081 | 0.7063 | ≈sabit |
+| cls_F1 | 0.6882 | 0.6892 | ≈sabit |
+
+(COCO: AP@0.50=0.352, AP@0.75=0.209; small **0.064** / medium 0.220 / large 0.339. Verim: 26.8M / 187.6 FPS
+/ 346 MB.)
+
+### 🎯 Bulgu — detection zayıflığı da kısmen NECK'miş (ASPP'nin det ikizi)
+- **PAN det'i +%6.4 çekti** (tek değişken = det neck) → ResNet detection zayıflığı **kısmen neck** (FPN'de
+  bottom-up lokalizasyon yolu eksikti). Deneme 18'in seg için gösterdiğinin (ASPP → decoder'mış) **det versiyonu.**
+- **seg/cls ~sabit** → PAN'ın **yalnız detection yoluna** girdiği tasarım doğrulandı. (Küçük seg drifti +%1.3:
+  det gradyanı artık PAN'dan geçip paylaşılan FPN'i dolaylı besliyor → ihmal edilebilir.)
+- **Small-obj AP 0.064** (DINOv2'nin 0.036'sının çok üstünde) → PAN'ın **bottom-up lokalizasyon yolu özellikle
+  küçük nesnelere** yaradı — PANet'in bilinen amacıyla birebir tutarlı.
+
+### ⚠️ Neden ASPP'nin +%43'ü kadar DEĞİL (dürüst)
+1. **Seg "bağlam-yoksundu"** (düz FCN çok-ölçeği tamamen görmezden geliyordu → ASPP sıfırdan büyük katkı).
+   **Detection zaten tüm FPN piramidini** (çok-ölçek) kullanıyordu → PAN **artımlı rafinaj**, sıfırdan bağlam değil.
+2. Detection'ın daha derin darboğazı **donuk feature'dan lokalizasyon** — neck bunu tam çözemez (ViTDet dersi).
+   +%6.4 "neck yardım etti ama tavanı açan o değil (o fine-tune)" ile tutarlı.
+
+### 🧩 Büyük resim — "conv omurga task-specific neck'ten faydalanır"
+İki ResNet neck yükseltmesi de yardım etti: **ASPP seg +%43 (Deneme 18) · PAN det +%6.4 (bu).** → Conv omurgada
+(ResNet, tavanda değil) göreve-özel neck **kazandırıyor.** Kontrast: **DINOv2'de** neck oynatmak nötr (task-native,
+Deneme 17) ya da zararlı (multilayer, Deneme 19) — çünkü seg/cls tavanda + det'in kaldıracı neck değil fine-tune.
+→ **Neck-kaldıracının işe yarayıp yaramaması backbone'un rejimine bağlı** (headroom + conv-fit).
+
+### 🏁 "Verimli tatlı nokta" — tam-yükseltilmiş ResNet
+ResNet (aspp+pan): det **0.205** / seg **0.466** / cls 0.706/0.689 · **27M param / 187 FPS / 346 MB.** En hafif/hızlı
+omurga, göreve-uygun neck'lerle → kısıtlı platform için **ucuz ama rekabetçi** (motivasyona doğrudan bağlanan sonuç).
+
+### Sonraki adım
+- Detection'ı daha çok istemek: **loss levers** (det-upweight + CIoU, cache-uyumlu ucuz) → sonra fine-tune (gerçek kaldıraç).
+- PAN'ı DINOv2'de denemek düşük öncelik (ASPP orada yaramadı; det kaldıracı fine-tune).
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum
