@@ -904,6 +904,62 @@ omurga, göreve-uygun neck'lerle → kısıtlı platform için **ucuz ama rekabe
 
 ---
 
+## Deneme 21 — 2026-07-30 — 🔬 FAZ 3: DINOv2 + CIoU kutu loss → "loss da det'i çözmedi; det FEATURE-bound"
+
+### Kurulum
+- `configs/train_colab_dinov2_ciou.yaml`: donuk DINOv2 baseline (RESULTS satır 9, Deneme 7: det 0.2300)
+  ile **tek fark**: RetinaNet kutu regresyon loss'u **L1 → CIoU** (Complete-IoU: örtüşme + merkez mesafesi +
+  en-boy oranı). Koordinat-L1 yerine **mAP-hizalı**; lokalizasyonu (AP@0.75) çekmeyi hedefler.
+- **Sıfır ek kod:** torchvision `_box_loss` ciou'yu destekliyor → RetinaNet regresyon head'inin `_loss_type`'ı
+  "ciou" yapıldı (`det_box_loss` config). Loss head'de, donuk trunk'ın **altında** → **cache-uyumlu**
+  (baseline DINOv2 trunk cache'i reuse, precompute yok). Cached, `--no-amp`. Aynı 22.5k/seed/lr.
+
+### Sonuç — baseline L1 (satır 9) vs CIoU (tek değişken: kutu loss)
+
+| metrik | baseline L1 (satır 9) | CIoU | delta |
+|---|---|---|---|
+| **detection_mAP** | 0.2300 | 0.2289 | **−0.5% (düz)** |
+| **AP@0.75** (CIoU'nun asıl vaadi) | ~0.22 | 0.225 | ~sabit |
+| seg_mIoU | 0.6011 | 0.6005 | sabit |
+| cls_mAP | 0.7800 | 0.7814 | sabit |
+| cls_F1 | 0.7239 | 0.7367 | +1.8% (dolaylı) |
+
+(COCO: AP@0.50=0.410, AP@0.75=**0.225**, small 0.028 / medium 0.280 / large 0.421.)
+
+### 🎯 Bulgu — CIoU donuk DINOv2 detection'ını oynatmadı (beklenti tuttu)
+**det düz + AP@0.75 sıçramadı** → CIoU'nun vaadi (lokalizasyon) gerçekleşmedi. Mekanizma:
+- **Darboğaz kutu loss'u değil, FEATURE.** DINOv2 det zayıflığı **donuk feature'dan lokalizasyon** — CIoU
+  loss'u mAP-hizalı yapar ama **feature'ın taşımadığı lokalizasyonu daha iyi bir loss ÇIKARAMAZ.** Aynı mantık
+  ASPP (seg) ve neck (det) için de geçerliydi → şimdi **loss da** aynı duvara tosladı.
+- **L1 zaten "yeterince iyi"ymiş** bu rejim için: donuk feature'la lokalizasyon loss'un şeklinden değil
+  feature'dan sınırlı → CIoU'nun geometrik rafinajları açacak bir şey bulamadı.
+- *(cls_F1 +1.8% CIoU etkisi değil; det gradyanı paylaşılan neck'ten geçtiği için dolaylı minör drift.)*
+
+### 🎯 DINOv2 detection hikâyesi artık ÜÇ NEGATİF + BİR POZİTİFLE sağlam
+Donuk DINOv2 detection'ına **her downstream müdahale kapalı**, tek işe yarayan adaptasyon:
+
+| müdahale tipi | deney | det etkisi |
+|---|---|---|
+| neck (yapı) | task-native (D17), multilayer (D19) | ✗ nötr / zararlı |
+| **loss** | **CIoU (bu)** | **✗ düz** |
+| **adaptasyon** | DINOv2+LoRA (D15) | **✓ +%16** |
+
+→ **DINOv2 detection FEATURE-bound; tek kaldıraç backbone ADAPTASYONU (fine-tune).** Üç bağımsız negatif
+(neck-yapı, neck-derinlik, loss) + bir pozitif (adaptasyon) ile **ViTDet'in "detection fine-tune ister"
+dersinin doğrudan, çok-yönlü doğrulaması.**
+
+### ⚠️ Caveat (dürüst)
+CIoU **fine-tuned** detection'da yerleşik bir iyileştirmedir (YOLOP/YOLOv4). Bu null **donuk-rejime özel** —
+"CIoU işe yaramaz" değil, **"donuk feature'la sınırlıyken loss oynatmak yetmiyor."** (multilayer/DPT ve
+ASPP-DINOv2 caveat'larıyla aynı çizgi: donuk tavan/feature-bound rejimde downstream müdahaleler capped.)
+
+### Sonraki adım
+- Detection'ı gerçekten yükseltmek → **backbone adaptasyonu** (son N blok fine-tune / daha yüksek LoRA),
+  CIoU + det-upweight'i **fine-tune ile BİRLİKTE** dene (feature çözülünce loss'un faydası ortaya çıkabilir).
+- Donuk rejimde detection ekseni **kapandı**: neck ✗, loss ✗ → daha fazla downstream deneme düşük değer.
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum
