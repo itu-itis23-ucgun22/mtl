@@ -1,0 +1,44 @@
+# DINOv2 donuk — TEK-GÖREV: yalnız CLASSIFICATION — Faz 3 task-interference probu.
+# Multi-task baseline (RESULTS satır 9: cls_mAP 0.7800 / cls_F1 0.7239) ile TEK FARK: det+seg loss'u 0.
+# cls'in KENDİ ağırlığı (0.5) multi-task ile aynı tutuldu (adil kıyas: sadece diğer görevler yok).
+#
+#   Soru: "Classification multi-task'ta det/seg tarafından FRENLENİYOR mu?" (cls zaten en güçlü görev)
+#     cls-only ≈ multi-task (0.78) → interference küçük;  >> → negatif transfer.
+#   DINOv2 cache'i paylaş (precompute YOK). GEÇERLİ METRİK: cls_mAP / cls_F1 (det/seg çöp).
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_clsonly.yaml \
+#            --features-dir features/dinov2_trunk/train --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_clsonly.yaml \
+#            --checkpoint checkpoints/colab_dinov2_clsonly_cached_epoch15.pt
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 0.0     # <-- kapalı
+  det_box: 0.0     # <-- kapalı
+  seg: 0.0         # <-- kapalı
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_clsonly
+  checkpoint_every_steps: 500

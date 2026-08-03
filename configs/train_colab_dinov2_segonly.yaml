@@ -1,0 +1,44 @@
+# DINOv2 donuk — TEK-GÖREV: yalnız SEGMENTATION — Faz 3 task-interference probu.
+# Multi-task baseline (RESULTS satır 9: seg 0.6011) ile TEK FARK: det+cls loss'u 0 → neck yalnız
+# segmentation gradyanıyla eğitilir. seg'in KENDİ ağırlığı (1) multi-task ile aynı.
+#
+#   Soru: "Segmentation multi-task'ta det/cls tarafından FRENLENİYOR mu?"
+#     seg-only ≈ multi-task (0.6011) → interference küçük;  >> → negatif transfer.
+#   DINOv2 cache'i paylaş (precompute YOK). GEÇERLİ METRİK: seg_mIoU (det/cls çöp).
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_segonly.yaml \
+#            --features-dir features/dinov2_trunk/train --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_segonly.yaml \
+#            --checkpoint checkpoints/colab_dinov2_segonly_cached_epoch15.pt
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 0.0     # <-- kapalı
+  det_box: 0.0     # <-- kapalı
+  seg: 1.0
+  cls: 0.0         # <-- kapalı
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_segonly
+  checkpoint_every_steps: 500

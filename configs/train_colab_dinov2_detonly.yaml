@@ -1,0 +1,46 @@
+# DINOv2 donuk — TEK-GÖREV: yalnız DETECTION — Faz 3 task-interference probu.
+# Multi-task baseline (RESULTS satır 9: det 0.2300) ile TEK FARK: seg+cls loss'u 0 → neck yalnız
+# detection gradyanıyla eğitilir = fonksiyonel tek-görev. det'in KENDİ ağırlığı (1/1) multi-task ile
+# aynı; sadece diğer görevler yok → fark = "seg/cls ile paylaşmanın etkisi" (interference).
+#
+#   Soru: "Detection multi-task'ta seg/cls tarafından FRENLENİYOR mu?"
+#     det-only ≈ multi-task (0.2300) → interference küçük → det backbone-bound (D17+CIoU'yu pekiştirir)
+#     det-only >> multi-task          → seg/cls det'i frenliyormuş (negatif transfer)
+#   Trunk donuk+aynı → DINOv2 cache'i paylaş (precompute YOK). GEÇERLİ METRİK: detection_mAP (seg/cls çöp).
+#     python scripts/train_cached.py --config configs/train_colab_dinov2_detonly.yaml \
+#            --features-dir features/dinov2_trunk/train --no-amp
+#     python scripts/eval.py --config configs/train_colab_dinov2_detonly.yaml \
+#            --checkpoint checkpoints/colab_dinov2_detonly_cached_epoch15.pt
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 518
+  num_workers: 4
+
+model:
+  backbone_name: dinov2_vitb14_reg
+  pretrained: true
+  trainable_backbone_layers: 0
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 0.0        # <-- kapalı
+  cls: 0.0        # <-- kapalı
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: true
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_dinov2_detonly
+  checkpoint_every_steps: 500
