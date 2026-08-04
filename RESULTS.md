@@ -66,7 +66,7 @@ Her referans farklı **REJİM** → mutlaka etiketiyle oku. Metrik paritesi: hep
 | görev | referans model | rejim | referans | bizim multi-task | gözlem |
 |---|---|---|---|---|---|
 | **det** | ResNet50+RetinaNet | trained, bizim 22.5k, tek-görev | **0.1932** | DINOv2 0.2300 · ResNet 0.1965 | trained ResNet ≈ frozen ResNet, **frozen DINOv2'nin ALTINDA** |
-| det | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | *(bekliyor)* | 0.2300 | — |
+| **det** | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | **0.4690** | DINOv2 0.2300 | SOTA **~2×** bizim; asıl gap **SMALL** (0.310 vs 0.036, ~9×) |
 | **seg** | SegFormer-B2 | trained, bizim 22.5k, tek-görev | *(bekliyor)* | 0.6011 | — |
 | cls | — | (atlandı: frozen cls-only=0.81 zaten var, D22) | — | 0.7800 | — |
 
@@ -76,6 +76,14 @@ loss platoda→yakınsamış) **frozen ResNet multi-task'a ≈ eşit** (0.1965) 
 detektörden daha iyi** — yani DINOv2'nin mutlak-düşük 0.23'ü "kötü" değil, normal trained ResNet'i geçiyor.
 **Alt-gözlem:** trained ResNet small-obj AP **0.070** > DINOv2 **0.036** (ResNet+FPN @512 ince spatial;
 DINOv2 patch14 kaba) — ama genel mAP'te DINOv2 önde. ⚠️ REFERANS (kıyas değil): rejim farkları etiketli.
+
+**🎯 Detection SOTA tavanı (zero-shot Faster R-CNN, full-COCO):** **0.4690** (AP@0.50=0.677; small 0.310 /
+med 0.525 / large 0.611) → frozen-multitask'ımızın (**0.2300**) **~2 katı.** Gap çok-faktörlü (full-veri 118k
+vs 22.5k + trained backbone + tek-görev + 2-stage Faster R-CNN + yüksek çözünürlük 800-1333). **Asıl gap küçük
+nesnelerde:** SOTA small **0.310** vs bizim **0.036** (**~9×**). → Frozen DINOv2 detection açığının çekirdeği
+**küçük-nesne/çözünürlük**: patch14 kaba grid + 518 çözünürlük küçüğü kaçırıyor; Faster R-CNN yüksek-res + FPN +
+RoIAlign ile parlıyor. Bu, "det kaldıracı = ince-feature/çözünürlük (fine-tune/ViTDet)" hikâyesinin en net kanıtı.
+Bağlam: **0.23 "kötü" değil** — frozen + multi-task + 22.5k kurulumun tavana (full-optimize SOTA) uzaklığı bu kadar.
 
 
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)

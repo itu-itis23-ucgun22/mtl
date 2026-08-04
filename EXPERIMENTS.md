@@ -1041,9 +1041,26 @@ large 0.305; AP@0.50=0.315, AP@0.75=0.203). Arkadaşın workstation'ında.
 3. **Small-obj:** trained ResNet 0.070 > DINOv2 0.036 (ResNet+FPN @512 ince spatial; DINOv2 patch14 kaba) —
    ama genel mAP'te DINOv2 önde.
 
-### Bekleyen (referans seti tamamlanınca RESULTS "Referans modeller" bölümü büyür)
-- **det zero-shot Faster R-CNN** (full-COCO SOTA tavanı, ~5 dk) — farklı rejim, "en iyi model ne yapıyor".
-- **seg SegFormer-B2** fine-tune (trained modern segmenter, ~2-4 sa) — bizim mIoU.
+### İkinci sonuç — Detection SOTA tavanı: zero-shot Faster R-CNN (full-COCO)
+`scripts/eval_pretrained_detector.py --model fasterrcnn`: torchvision Faster R-CNN v2 (COCO-pretrained),
+bizim val'de **zero-shot** (hiç eğitmeden). **det_mAP = 0.4690** (AP@0.50=0.677, AP@0.75=0.513; small **0.310**
+/ med 0.525 / large 0.611).
+
+| model | det_mAP | small AP | rejim |
+|---|---|---|---|
+| **Faster R-CNN (bu, SOTA tavanı)** | **0.4690** | **0.310** | zero-shot, full-COCO 118k |
+| frozen DINOv2 multi-task (satır 9) | 0.2300 | 0.036 | frozen, 22.5k, multi-task |
+| trained ResNet det-ft | 0.1932 | 0.070 | trained, 22.5k, tek-görev |
+
+**🎯 Bulgu:** SOTA tavanı bizim frozen-multitask'ın **~2 katı** (0.469 vs 0.230). Gap çok-faktörlü (full-veri +
+trained backbone + tek-görev + 2-stage + yüksek çözünürlük). **Asıl gap KÜÇÜK NESNELERDE:** SOTA small 0.310 vs
+bizim 0.036 (**~9×**). → Frozen DINOv2 detection açığının çekirdeği **küçük-nesne/çözünürlük** (patch14 kaba grid,
+518 res küçüğü kaçırıyor; Faster R-CNN 800-1333 + FPN + RoIAlign ile parlıyor). "det kaldıracı = ince-feature/
+çözünürlük" (ViTDet/fine-tune hikâyesi) için en net kanıt. **Bağlam:** 0.23 "kötü" değil — frozen+multi-task+22.5k
+kurulumun full-optimize SOTA'ya uzaklığı bu; küçük nesne + tam eğitim + fazla veri ile tavan çok daha yüksek.
+
+### Bekleyen
+- **seg SegFormer-B2** fine-tune (trained modern segmenter, ~2-4 sa) — bizim mIoU. RESULTS satırını doldurur.
 - **cls: atlandı** — frozen cls-only (D22: 0.81) zaten "izole cls" tavanını veriyor; trained ResNet cls marjinal.
 
 ---
