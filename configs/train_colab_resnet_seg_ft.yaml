@@ -1,0 +1,47 @@
+# NORMAL MODEL REFERANSI — Segmentation: DeepLab-tarzı (ResNet50 + ASPP), fine-tuned, tek-görev.
+# "Bu veriyle semantic seg'i tek başına, normal şekilde yapsan" karşılığı: ResNet50 (ImageNet) backbone
+# AÇIK + ASPP decoder + yalnız seg. = DeepLabV3-ResNet50'nin normal eğitimi (ailesinden; byte-byte değil).
+#
+#   Amaç: REFERANS/TAVAN. ⚠️ KIYAS DEĞİL (backbone açık + tek görev).
+#   Kıyas noktaları: donuk ResNet+FCN multi-task (satır 8: seg 0.3215) · donuk ResNet+ASPP (satır 20: 0.4606)
+#                    · donuk DINOv2 multi-task (satır 9: 0.6011).
+#   Backbone açık → CACHE YOK, normal train.py. GEÇERLİ METRİK: seg_mIoU (det/cls çöp).
+#     python scripts/train.py --config configs/train_colab_resnet_seg_ft.yaml
+#     python scripts/eval.py  --config configs/train_colab_resnet_seg_ft.yaml \
+#            --checkpoint checkpoints/colab_resnet_seg_ft_epoch15.pt
+#
+# NOT: seg_neck=aspp = DeepLab bağlam modülü. trainable=3 konvansiyonel; 5 = tam. amp=false güvenli.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: resnet50
+  pretrained: true
+  trainable_backbone_layers: 3     # <-- backbone AÇIK (fine-tune); 5 = tam
+  seg_neck: aspp                   # <-- DeepLab decoder (ASPP)
+
+loss:
+  det_cls: 0.0     # <-- kapalı
+  det_box: 0.0     # <-- kapalı (tek-görev: segmentation)
+  seg: 1.0
+  cls: 0.0         # <-- kapalı
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: false
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_resnet_seg_ft
+  checkpoint_every_steps: 500

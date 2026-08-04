@@ -1,0 +1,48 @@
+# NORMAL MODEL REFERANSI — Detection: standart RetinaNet-ResNet50-FPN, fine-tuned, tek-görev.
+# "Bu veriyle detection'ı tek başına, normal şekilde yapsan" karşılığı: ResNet50 (ImageNet) backbone
+# AÇIK (fine-tune) + RetinaNet head + yalnız det. = torchvision retinanet_resnet50_fpn'in normal eğitimi.
+#
+#   Amaç: REFERANS/TAVAN — "donuk-foundation-multitask, normal eğitilmiş uzmana ne kadar yakın?"
+#   ⚠️ KIYAS DEĞİL, referans: backbone AÇIK (biz donuk) + TEK görev (biz multi). İki eksen birden farklı.
+#   Kıyas noktaları: donuk ResNet multi-task (satır 8: det 0.1965) · donuk DINOv2 multi-task (satır 9: 0.2300).
+#   Backbone açık → CACHE YOK, normal train.py. GEÇERLİ METRİK: detection_mAP (seg/cls çöp).
+#     python scripts/train.py --config configs/train_colab_resnet_det_ft.yaml
+#     python scripts/eval.py  --config configs/train_colab_resnet_det_ft.yaml \
+#            --checkpoint checkpoints/colab_resnet_det_ft_epoch15.pt
+#
+# NOT: trainable_backbone_layers=3 = konvansiyonel fine-tune (layer2-4). Tam fine-tune için 5 yap.
+#      amp=false: açık ResNet + focal-loss NaN geçmişi (Deneme 6) → fp32 güvenli.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: resnet50
+  pretrained: true
+  trainable_backbone_layers: 3     # <-- backbone AÇIK (fine-tune); 5 = tam
+  det_neck: fpn                    # standart RetinaNet (FPN)
+
+loss:
+  det_cls: 1.0
+  det_box: 1.0
+  seg: 0.0        # <-- kapalı (tek-görev: detection)
+  cls: 0.0        # <-- kapalı
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: false
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_resnet_det_ft
+  checkpoint_every_steps: 500

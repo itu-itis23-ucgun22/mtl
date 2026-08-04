@@ -1,0 +1,45 @@
+# NORMAL MODEL REFERANSI — Classification: standart ResNet50 çok-etiketli sınıflandırıcı, fine-tuned, tek-görev.
+# "Bu veriyle multi-label cls'i tek başına, normal şekilde yapsan" karşılığı: ResNet50 (ImageNet) backbone
+# AÇIK + GAP+FC head + yalnız cls. = standart ImageNet-init ResNet classifier'ın bu veriye fine-tune'u.
+#
+#   Amaç: REFERANS/TAVAN. ⚠️ KIYAS DEĞİL (backbone açık + tek görev).
+#   Kıyas noktaları: donuk ResNet multi-task (satır 8: cls 0.7084/0.6799) · donuk DINOv2 (satır 9: 0.7800/0.7239).
+#   Backbone açık → CACHE YOK, normal train.py. GEÇERLİ METRİK: cls_mAP / cls_F1 (det/seg çöp).
+#     python scripts/train.py --config configs/train_colab_resnet_cls_ft.yaml
+#     python scripts/eval.py  --config configs/train_colab_resnet_cls_ft.yaml \
+#            --checkpoint checkpoints/colab_resnet_cls_ft_epoch15.pt
+#
+# NOT: cls ağırlığı 0.5 = multi-task'takiyle aynı (adil). trainable=3 konvansiyonel; 5 = tam. amp=false.
+data:
+  ann_file: data/coco_subset/annotations/instances_train_subset.json
+  img_dir: data/coco_subset/images/train
+  val_ann_file: data/coco_subset/annotations/instances_val_subset.json
+  val_img_dir: data/coco_subset/images/val
+  n_images: 22500
+  img_size: 512
+  num_workers: 4
+
+model:
+  backbone_name: resnet50
+  pretrained: true
+  trainable_backbone_layers: 3     # <-- backbone AÇIK (fine-tune); 5 = tam
+
+loss:
+  det_cls: 0.0     # <-- kapalı
+  det_box: 0.0     # <-- kapalı
+  seg: 0.0         # <-- kapalı (tek-görev: classification)
+  cls: 0.5
+
+train:
+  device: cuda
+  batch_size: 4
+  epochs: 16
+  max_steps: null
+  lr: 0.0001
+  weight_decay: 0.0001
+  amp: false
+  seed: 42
+  log_every: 20
+  checkpoint_dir: checkpoints
+  run_name: colab_resnet_cls_ft
+  checkpoint_every_steps: 500
