@@ -1012,6 +1012,42 @@ multi-task'ta cls'i bir miktar aç bıraktığını da doğrular (D16'yla birlik
 
 ---
 
+## Deneme 23 — 2026-08-04 — 📐 REFERANS modeller açıldı: "normal/SOTA model vs multi-task'ımız" (görev-başı)
+
+### Amaç ve çerçeve
+Multi-task modelimizin mutlak sayılarını bağlamlandırmak için her görevde bir **referans model** (normal/
+SOTA). ⚠️ **KIYAS DEĞİL, REFERANS:** referanslar multi-task'ımızla farklı rejimde (tek-görev + backbone açık/
+zero-shot + farklı mimari). Her biri **kendi rejim-etiketiyle** okunur, referanslar birbiriyle kıyaslanmaz.
+Metrik paritesi: hepsi bizim val + bizim metrik (det pycocotools, seg bizim mIoU). Kod: `eval_pretrained_detector.py`
+(zero-shot detektör), `train_segformer.py` (SegFormer fine-tune), `resnet_*_ft` configleri (trained specialist).
+
+### İlk sonuç — Detection: trained ResNet specialist (bizim veri)
+`train_colab_resnet_det_ft.yaml`: ResNet50 **backbone AÇIK** (trainable=3) + RetinaNet + **det-only**, 22.5k.
+Loss uzun süre platoda (yakınsamış); step 77500 ≈ nihai. **det_mAP = 0.1932** (small 0.070 / med 0.214 /
+large 0.305; AP@0.50=0.315, AP@0.75=0.203). Arkadaşın workstation'ında.
+
+| model | det_mAP | not |
+|---|---|---|
+| **trained ResNet (bu ref)** | **0.1932** | backbone açık + tek-görev, bizim 22.5k |
+| frozen ResNet multi-task (satır 8) | 0.1965 | ≈ eşit |
+| frozen DINOv2 multi-task (satır 9) | 0.2300 | **üstünde** |
+
+### 🎯 Bulgu
+1. **Trained ResNet ≈ frozen ResNet** (0.193 ≈ 0.1965) → ResNet'in backbone'unu 22.5k'da açıp detection'a izole
+   etmek onu **neredeyse hiç oynatmadı** → ResNet detection'ı bu veri bütçesinde **data/mimari-sınırlı**.
+2. **Frozen DINOv2 (0.23) > trained ResNet detektör (0.19)** → bu veri ölçeğinde **frozen foundation feature'ı,
+   konvansiyonel-trained bir ResNet detektörden daha iyi.** → DINOv2'nin mutlak-düşük 0.23'ü **"kötü" değil**;
+   normal bir trained detektörü geçiyor. (Referans'ın asıl kazanımı: mutlak sayıyı bağlamlandırmak.)
+3. **Small-obj:** trained ResNet 0.070 > DINOv2 0.036 (ResNet+FPN @512 ince spatial; DINOv2 patch14 kaba) —
+   ama genel mAP'te DINOv2 önde.
+
+### Bekleyen (referans seti tamamlanınca RESULTS "Referans modeller" bölümü büyür)
+- **det zero-shot Faster R-CNN** (full-COCO SOTA tavanı, ~5 dk) — farklı rejim, "en iyi model ne yapıyor".
+- **seg SegFormer-B2** fine-tune (trained modern segmenter, ~2-4 sa) — bizim mIoU.
+- **cls: atlandı** — frozen cls-only (D22: 0.81) zaten "izole cls" tavanını veriyor; trained ResNet cls marjinal.
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum

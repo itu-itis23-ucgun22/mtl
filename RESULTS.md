@@ -58,6 +58,26 @@ up-weight'leyince +%3-4 vermesiyle tutarlı). **Rafine sonuç:** detection inter
 classification interference-bound (headroom var). Detay: EXPERIMENTS Deneme 22.
 
 
+## 📐 Referans modeller: multi-task modelimiz vs "normal / SOTA model" (görev-başı — Deneme 23)
+
+Amaç: multi-task modelimizi **her görevde bir referansla** kıyasla (referanslar birbiriyle DEĞİL).
+Her referans farklı **REJİM** → mutlaka etiketiyle oku. Metrik paritesi: hepsi bizim val + bizim metrik.
+
+| görev | referans model | rejim | referans | bizim multi-task | gözlem |
+|---|---|---|---|---|---|
+| **det** | ResNet50+RetinaNet | trained, bizim 22.5k, tek-görev | **0.1932** | DINOv2 0.2300 · ResNet 0.1965 | trained ResNet ≈ frozen ResNet, **frozen DINOv2'nin ALTINDA** |
+| det | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | *(bekliyor)* | 0.2300 | — |
+| **seg** | SegFormer-B2 | trained, bizim 22.5k, tek-görev | *(bekliyor)* | 0.6011 | — |
+| cls | — | (atlandı: frozen cls-only=0.81 zaten var, D22) | — | 0.7800 | — |
+
+**🎯 Detection bulgusu (trained ResNet ref):** backbone açık + tek-görev trained ResNet detektör (0.1932,
+loss platoda→yakınsamış) **frozen ResNet multi-task'a ≈ eşit** (0.1965) ve **frozen DINOv2'nin altında**
+(0.2300). → Bu veri ölçeğinde (22.5k) **frozen foundation feature'ı, konvansiyonel-trained ResNet
+detektörden daha iyi** — yani DINOv2'nin mutlak-düşük 0.23'ü "kötü" değil, normal trained ResNet'i geçiyor.
+**Alt-gözlem:** trained ResNet small-obj AP **0.070** > DINOv2 **0.036** (ResNet+FPN @512 ince spatial;
+DINOv2 patch14 kaba) — ama genel mAP'te DINOv2 önde. ⚠️ REFERANS (kıyas değil): rejim farkları etiketli.
+
+
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)
 
 Motivasyon (kısıtlı platform / uçak): en pahalı parça omurga → doğruluğun yanına **maliyet**. Ölçülen:
