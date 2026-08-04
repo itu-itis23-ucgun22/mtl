@@ -960,6 +960,58 @@ ASPP-DINOv2 caveat'larıyla aynı çizgi: donuk tavan/feature-bound rejimde down
 
 ---
 
+## Deneme 22 — 2026-08-04 — 🎯 FAZ 3: tek-görev ablasyonu → "ASİMETRİK interference: cls eziliyor, det/seg değil"
+
+### Kurulum
+- `configs/train_colab_dinov2_{detonly,segonly,clsonly}.yaml`: donuk DINOv2 (RESULTS satır 9) ile TEK FARK:
+  diğer görevlerin loss ağırlığı **0** → neck yalnız o görevin gradyanıyla eğitilir = fonksiyonel tek-görev
+  (**sıfır kod**). Her görevin kendi ağırlığı multi-task'takiyle aynı → fark **yalnız diğer görevlerin varlığı**.
+- Üçü de aynı DINOv2 trunk cache'ini paylaştı (cache-reuse, precompute bir kez), `--no-amp`.
+- **Amaç:** tek-görev vs multi-task farkı = **task interference** (görevler birbirini frenliyor mu?).
+
+### Sonuç — tek-görev vs multi-task (satır 9); her görevin KENDİ geçerli metriği
+
+| görev | tek-görev | multi-task | delta | yön |
+|---|---|---|---|---|
+| detection_mAP | 0.2231 | 0.2300 | **−3.0%** | multi hafif ÖNDE |
+| seg_mIoU | 0.5931 | 0.6011 | **−1.3%** | multi hafif ÖNDE |
+| **cls_mAP** | **0.8117** | 0.7800 | **+4.1%** | **tek-görev ÖNDE** |
+| **cls_F1** | **0.7573** | 0.7239 | **+4.6%** | **tek-görev ÖNDE** |
+
+### 🎯 Bulgu — interference ASİMETRİK (beklenen "yok" değil)
+İki farklı davranış:
+1. **det + seg: interference YOK (hatta hafif POZİTİF transfer).** Tek başına eğitmek onları **iyileştirmedi**
+   (multi ≈ / hafif önde) → seg/cls det'i, det/cls seg'i frenlemiyor. Paylaşılan neck üç görevin gradyanıyla
+   daha çok sinyal alıp bu iki uzamsal görevde biraz daha iyi (auxiliary regülarizasyon).
+2. **cls: GERÇEK interference.** cls-only (0.81) multi-task'ı (0.78) **+%4 geçiyor** → multi-task **cls'i eziyor.**
+
+### 🧠 Neden cls eziliyor — mekanizma
+cls **global** feature ister (SFP level "3", stride 32 + GAP). det/seg ise **uzamsal + yoğun** görevler →
+paylaşılan neck'e **çok daha fazla gradyan** akıtırlar. Multi-task'ta neck ağırlıkla uzamsal görevlere göre
+optimize olur → cls'in dayandığı global feature **suboptimal** kalır. Tek başına cls neck'i tamamen kendine
+göre ayarlayabilir → +%4. Yani **"tek fazla görev" (görüntü-düzeyi cls, uzamsal değil) iki yoğun görev
+tarafından paylaşılan neck'te dışlanıyor.** (Deneme 16 ile tutarlı: adaptif loss da cls'i up-weight'leyince
++%3-4 vermişti — cls default kurguda "aç bırakılıyor", ilgi görünce kazanıyor.)
+
+### 🎯🎯 "Backbone-bound" iddiasını RAFİNE ediyor (görev-bazlı)
+- **Detection: FEATURE-bound.** det-only 0.2231 ≈ multi 0.2300 → **sıfır rekabetle bile** det ~0.22'de tavan →
+  darboğaz interference değil, donuk feature. Bu, CIoU/neck/multilayer null'larıyla **aynı koro** — detection'ın
+  kesin feature-bound olduğunun **dördüncü bağımsız kanıtı** (neck ✗, loss ✗, **interference ✗**, adaptasyon ✓).
+- **Classification: interference-bound (headroom VAR).** cls multi-task'ta tavanda değil — izole edilince +%4.
+  Yani cls'in açığı feature değil, **paylaşımdan** geliyor. det ile zıt.
+
+### ⚠️ Novel-iddia notu / kapsam
+Bu **DINOv2** (generalist). Asıl ilginç soru: **uzman** backbone (SAM/MAE — dar feature) tek-görev vs multi-task'ta
+**daha büyük** asimetri mi gösteriyor? ("pretraining interference'ı öngörür" iddiasının çekirdeği.) Bunun için bir
+uzmanın tek-görev üçlüsü gerekir (bütçe kararı). Ayrıca cls-only'nin geçmesi, mevcut sabit 0.5 cls ağırlığının
+multi-task'ta cls'i bir miktar aç bıraktığını da doğrular (D16'yla birlikte).
+
+### Sonraki adım
+- İstersen bir **uzman** (SAM/MAE) tek-görev üçlüsü → asimetrinin pretraining'e bağlı olup olmadığı.
+- Ya da konsolidasyon: bu asimetrik-interference bulgusu tek başına güçlü ve yeni.
+
+---
+
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
 
 ### Kurulum

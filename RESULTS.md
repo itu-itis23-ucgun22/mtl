@@ -39,6 +39,25 @@ Metrikler: `detection_mAP` (COCO bbox mAP), `seg_mIoU`, `cls_mAP`, `cls_F1`.
 > satırı olarak alınmadı. Gerçek donuk-ResNet koşusu artık satır 6'dır.
 
 
+## 🔬 Task-interference: tek-görev vs multi-task (donuk DINOv2 — Deneme 22)
+
+Donuk DINOv2'yi her görev **tek başına** eğitip (diğer loss'lar 0) multi-task (satır 9) ile kıyas.
+Her görevin **kendi** metriği geçerli (diğerleri eğitilmemiş → çöp). Tek fark = diğer görevlerin varlığı.
+
+| görev | tek-görev | multi-task (satır 9) | delta | yorum |
+|---|---|---|---|---|
+| detection_mAP | 0.2231 | 0.2300 | **−3.0%** | interference YOK → det **FEATURE-bound** (dördüncü kanıt: neck✗/loss✗/interference✗/LoRA✓) |
+| seg_mIoU | 0.5931 | 0.6011 | **−1.3%** | interference YOK (hafif pozitif transfer) |
+| **cls_mAP** | **0.8117** | 0.7800 | **+4.1%** | **GERÇEK interference: multi-task cls'i eziyor** |
+| **cls_F1** | **0.7573** | 0.7239 | **+4.6%** | " |
+
+**Kazanım / gözlem:** interference **asimetrik**. det/seg (uzamsal, yoğun) paylaşılan neck'e çok gradyan akıtır
+→ birbirini frenlemez, hatta hafif yardım. **cls (global, level-3+GAP) dışlanır** → tek başına +%4. Yani "tek
+fazla görev" (görüntü-cls) iki yoğun görevin baskıladığı neck'te aç kalıyor (D16 adaptif-loss'un cls'i
+up-weight'leyince +%3-4 vermesiyle tutarlı). **Rafine sonuç:** detection interference-immune/feature-bound;
+classification interference-bound (headroom var). Detay: EXPERIMENTS Deneme 22.
+
+
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)
 
 Motivasyon (kısıtlı platform / uçak): en pahalı parça omurga → doğruluğun yanına **maliyet**. Ölçülen:
