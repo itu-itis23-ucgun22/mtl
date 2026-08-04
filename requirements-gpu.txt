@@ -15,7 +15,8 @@ scikit-learn>=1.3     # cls metrikleri (mAP/F1)
 requests>=2.31
 
 # --- HF omurgalar ---
-transformers>=4.40    # BEiT, I-JEPA
+transformers>=4.40,<4.45  # BEiT / I-JEPA / SegFormer. ÜST SINIR: yeni transformers torch>=2.4 ister,
+                          # ama torch 2.3.1'e pinli -> uyumsuz. 4.44.x torch 2.3 ile çalışır.
 safetensors>=0.4      # yerel ağırlık yükleme (MTL_WEIGHTS_DIR)
 
 # --- rapor / analiz ---
