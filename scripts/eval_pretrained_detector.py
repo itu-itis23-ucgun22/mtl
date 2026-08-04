@@ -8,8 +8,8 @@ detektör tavanı"dır — ⚠️ KIYAS DEĞİL, REFERANS: zero-shot (hiç eğit
 Sınıf eşlemesi: torchvision COCO detection modellerinin çıktı label'ları COCO category_id'lerdir
 (1..90, boşluklu) → bizim val JSON'ının category_id'leriyle DOĞRUDAN hizalı (ekstra eşleme gerekmez).
 
-    python scripts/eval_pretrained_detector.py --config configs/train_colab_gpu.yaml
-    python scripts/eval_pretrained_detector.py --config configs/train_colab_gpu.yaml --model retinanet
+    python scripts/eval_pretrained_detector.py                      # config YOK: varsayılan val yolları + cuda
+    python scripts/eval_pretrained_detector.py --model retinanet    # ya da fcos
     # test split için: --ann-file .../instances_test_subset.json --img-dir .../images/test
 """
 from __future__ import annotations
@@ -43,17 +43,19 @@ def build_detector(name: str):
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True, help="val yollarını okumak için (model config'i değil)")
+    parser.add_argument("--config", default=None, help="OPSIYONEL: val yollarını okumak için; "
+                        "verilmezse varsayılan data/coco_subset yolları kullanılır (model config'i DEĞİL)")
+    parser.add_argument("--device", default="cuda", help="cuda | cpu")
     parser.add_argument("--model", default="fasterrcnn", choices=["fasterrcnn", "retinanet", "fcos"])
-    parser.add_argument("--ann-file", default=None, help="verilmezse config'in val'i")
+    parser.add_argument("--ann-file", default=None, help="verilmezse config'in/varsayılanın val'i")
     parser.add_argument("--img-dir", default=None)
     parser.add_argument("--results-csv", default="runs/results.csv")
     parser.add_argument("--score-thresh", type=float, default=0.05, help="COCOeval hızı için düşük eşik")
     parser.add_argument("--split-name", default=None)
     args = parser.parse_args()
 
-    cfg = load_config(args.config)
-    device = resolve_device(cfg.train.device)
+    cfg = load_config(args.config)  # config=None → tüm varsayılanlar (val yolları DataConfig default'u = doğru)
+    device = resolve_device(args.device)
     ann_file = args.ann_file or cfg.data.val_ann_file
     img_dir = Path(args.img_dir or cfg.data.val_img_dir)
 
