@@ -67,7 +67,8 @@ Her referans farklı **REJİM** → mutlaka etiketiyle oku. Metrik paritesi: hep
 |---|---|---|---|---|---|
 | **det** | ResNet50+RetinaNet | trained, bizim 22.5k, tek-görev | **0.1932** | DINOv2 0.2300 · ResNet 0.1965 | trained ResNet ≈ frozen ResNet, **frozen DINOv2'nin ALTINDA** |
 | **det** | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | **0.4690** | DINOv2 0.2300 | SOTA **~2×** bizim; asıl gap **SMALL** (0.310 vs 0.036, ~9×) |
-| **seg** | SegFormer-B2 | trained, bizim 22.5k, tek-görev | *(bekliyor)* | 0.6011 | — |
+| **seg** | ResNet50+ASPP | trained (backbone AÇIK), bizim 22.5k, tek-görev | **0.3751** | 0.6011 | step 48000/90000'de **kesildi** (loss platoda, yakınsamış). trainable ResNet **frozen ASPP'nin (satır 20: 0.46) ALTINDA** → fine-tune 22.5k'da seg'e yaramadı |
+| seg | SegFormer-B2 | trained, bizim 22.5k, tek-görev | *(bekliyor)* | 0.6011 | — |
 | cls | — | (atlandı: frozen cls-only=0.81 zaten var, D22) | — | 0.7800 | — |
 
 **🎯 Detection bulgusu (trained ResNet ref):** backbone açık + tek-görev trained ResNet detektör (0.1932,
@@ -84,6 +85,14 @@ nesnelerde:** SOTA small **0.310** vs bizim **0.036** (**~9×**). → Frozen DIN
 **küçük-nesne/çözünürlük**: patch14 kaba grid + 518 çözünürlük küçüğü kaçırıyor; Faster R-CNN yüksek-res + FPN +
 RoIAlign ile parlıyor. Bu, "det kaldıracı = ince-feature/çözünürlük (fine-tune/ViTDet)" hikâyesinin en net kanıtı.
 Bağlam: **0.23 "kötü" değil** — frozen + multi-task + 22.5k kurulumun tavana (full-optimize SOTA) uzaklığı bu kadar.
+
+**🎯 Segmentation (trained ResNet ref):** trainable ResNet+ASPP seg-only (**0.3751**, train loss platoda→yakınsamış)
+**frozen ResNet+ASPP'nin (satır 20: 0.4606) ALTINDA** ve frozen DINOv2'nin (0.6011) çok altında. → **Backbone'u
+22.5k'da fine-tune etmek seg'i İYİLEŞTİRMEDİ, hatta frozen'a göre kötüleştirdi** — az veride güçlü pretrained
+backbone'u **çözmek, dondurmaktan kötü** (backbone drift/overfit; frozen ImageNet feature'ı daha sağlam). Bu,
+projenin **frozen-foundation tezini pekiştiriyor:** referans (tavan sanılan) bizim frozen yaklaşımımızın **altında**
+çıktı. (⚠️ kısmen LR/optimizasyon olabilir ama loss yakınsamış → gerçek etki.) Detection ref'iyle aynı melodi:
+trained ResNet ≈/< frozen, **frozen DINOv2 hepsinin üstünde.**
 
 
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)

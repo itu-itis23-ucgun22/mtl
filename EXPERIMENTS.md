@@ -1059,8 +1059,28 @@ bizim 0.036 (**~9×**). → Frozen DINOv2 detection açığının çekirdeği **
 çözünürlük" (ViTDet/fine-tune hikâyesi) için en net kanıt. **Bağlam:** 0.23 "kötü" değil — frozen+multi-task+22.5k
 kurulumun full-optimize SOTA'ya uzaklığı bu; küçük nesne + tam eğitim + fazla veri ile tavan çok daha yüksek.
 
+### Üçüncü sonuç — Segmentation: trained ResNet specialist (bizim veri)
+`train_colab_resnet_seg_ft.yaml`: ResNet50 **backbone AÇIK** (trainable=3) + **ASPP** (DeepLab) + **seg-only**,
+22.5k. Train loss uzun süredir platoda → **step 48000'de (~8.5/16 epoch) KESİLDİ** (yakınsamış, tam 90000'e
+koşulmadı — loss düşmediği için beklemeye değmedi). **seg_mIoU = 0.3751** (verim: 26.8M / 84.9 FPS / 283 MB).
+⚠️ Epoch farkı (8.5 vs frozen ASPP'nin 16'sı) bir confound ama loss platoda olduğu için ~yakınsamış sayılır.
+
+| model | seg_mIoU | not |
+|---|---|---|
+| **trainable ResNet+ASPP seg-only (bu ref)** | **0.3751** | backbone açık, bizim 22.5k |
+| frozen ResNet+ASPP multi-task (satır 20) | 0.4606 | **üstünde!** (backbone donuk) |
+| frozen DINOv2 multi-task (satır 9) | 0.6011 | çok üstünde |
+
+**🎯 Bulgu — fine-tune seg'i KÖTÜLEŞTİRDİ (frozen > trainable):** trainable ResNet+ASPP (0.375) **frozen
+ResNet+ASPP'nin (0.46) ALTINDA.** Yani ResNet backbone'unu 22.5k'da çözmek seg'i **iyileştirmedi, bozdu.**
+Mekanizma: az veride güçlü pretrained backbone'u fine-tune etmek **drift/overfit** → ImageNet feature'ı degrade
+olur; donuk tutmak (yalnız ASPP eğit) daha sağlam. → **frozen-foundation tezini pekiştiriyor:** "tavan" sanılan
+trained referans, bizim frozen yaklaşımımızın **altında** çıktı. (⚠️ kısmen LR/optim olabilir; ama loss yakınsamış.)
+Detection ref'iyle aynı desen: trained ResNet ≈/< frozen; **frozen DINOv2 hepsinin üstünde.**
+
 ### Bekleyen
-- **seg SegFormer-B2** fine-tune (trained modern segmenter, ~2-4 sa) — bizim mIoU. RESULTS satırını doldurur.
+- **seg SegFormer-B2** fine-tune (trained MODERN/güçlü segmenter, ~2-4 sa) — bizim mIoU. Asıl "modern tavan"ı o
+  verecek (ResNet+ASPP zaten bizim mimarimiz, redundant). RESULTS'taki ikinci seg satırını doldurur.
 - **cls: atlandı** — frozen cls-only (D22: 0.81) zaten "izole cls" tavanını veriyor; trained ResNet cls marjinal.
 
 ---
