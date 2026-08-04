@@ -15,6 +15,7 @@ Sınıf eşlemesi: torchvision COCO detection modellerinin çıktı label'ları 
 from __future__ import annotations
 
 import argparse
+import time
 from pathlib import Path
 
 import torch
@@ -25,8 +26,33 @@ from pycocotools.cocoeval import COCOeval
 from torchvision.transforms.functional import to_tensor
 
 from mtl.config import load_config
+from mtl.utils.bench import count_params
 from mtl.utils.device import resolve_device
 from mtl.utils.results import append_result
+
+
+@torch.no_grad()
+def measure_detector_fps(model, images, device, warmup: int = 5, iters: int = 50) -> dict:
+    """TAM detektör (backbone+RPN+head) uçtan-uca çıkarım hızı, batch=1 (gerçek-zaman).
+    `images`: önceden device'a alınmış tensor listesi (native çözünürlük — modelin işlediği hâl).
+    ⚠️ Bizim A100 "Verimlilik" tablosuyla DOĞRUDAN kıyaslanamaz: (a) TAM model (yalnız backbone değil),
+    (b) farklı donanım, (c) native res (800-1333, bizim 512 değil). Yine de "2-stage detektör yavaş"ı gösterir."""
+    is_cuda = device.type == "cuda"
+    model.eval()
+    for x in images[:warmup]:
+        model([x])
+    if is_cuda:
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats(device)
+    t0 = time.perf_counter()
+    for x in images[warmup:warmup + iters]:
+        model([x])
+    if is_cuda:
+        torch.cuda.synchronize()
+    lat_ms = (time.perf_counter() - t0) / iters * 1000.0
+    peak = (torch.cuda.max_memory_allocated(device) / 1e6) if is_cuda else float("nan")
+    return {"params_M": count_params(model) / 1e6, "latency_ms": lat_ms,
+            "fps": 1000.0 / lat_ms, "peak_mem_MB": peak}
 
 
 def build_detector(name: str):
@@ -52,6 +78,7 @@ def main() -> None:
     parser.add_argument("--results-csv", default="runs/results.csv")
     parser.add_argument("--score-thresh", type=float, default=0.05, help="COCOeval hızı için düşük eşik")
     parser.add_argument("--split-name", default=None)
+    parser.add_argument("--no-fps", action="store_true", help="uçtan-uca FPS/gecikme ölçümünü atla")
     args = parser.parse_args()
 
     cfg = load_config(args.config)  # config=None → tüm varsayılanlar (val yolları DataConfig default'u = doğru)
@@ -94,8 +121,27 @@ def main() -> None:
     ev.summarize()
     mAP = float(ev.stats[0])  # AP@[.50:.95] — bizim detection_mAP ile aynı tanım
 
+    # Uçtan-uca hız (TAM detektör, batch=1) — motivasyon: doğruluk↔hız takası (2-stage yavaş beklenir)
+    eff = None
+    if not args.no_fps:
+        n_time = 55
+        timing_imgs = []
+        for iid in img_ids[:n_time]:
+            info = coco.loadImgs(iid)[0]
+            im = Image.open(img_dir / info["file_name"]).convert("RGB")
+            timing_imgs.append(to_tensor(im).to(device))
+        eff = measure_detector_fps(model, timing_imgs, device)
+
     print(f"\n=== REFERANS: pretrained {args.model} (COCO, ZERO-SHOT) — bizim val'de ===")
     print(f"  detection_mAP : {mAP:.4f}   (⚠️ full-COCO tavanı; kıyas değil, referans)")
+    if eff:
+        print(f"  --- uçtan-uca hız (TAM model, batch=1, {device.type}) ---")
+        print(f"  params_M    : {eff['params_M']:.1f}")
+        print(f"  latency_ms  : {eff['latency_ms']:.2f}")
+        print(f"  fps         : {eff['fps']:.1f}")
+        if eff['peak_mem_MB'] == eff['peak_mem_MB']:
+            print(f"  peak_mem_MB : {eff['peak_mem_MB']:.0f}")
+        print(f"  ⚠️ A100 'Verimlilik' tablosuyla kıyaslanamaz: TAM model (backbone değil) + farklı GPU + native res.")
     append_result(args.results_csv, {
         "run_name": f"ref_{args.model}_coco_zeroshot" + (f"_{args.split_name}" if args.split_name else ""),
         "backbone": f"{args.model}_r50_coco",
@@ -104,6 +150,8 @@ def main() -> None:
         "split": args.split_name or ("test" if args.ann_file else "val"),
         "step": 0,
         "detection_mAP": mAP,
+        **({"params_M": round(eff["params_M"], 2), "latency_ms": round(eff["latency_ms"], 2),
+            "fps": round(eff["fps"], 1), "peak_mem_MB": round(eff["peak_mem_MB"], 0)} if eff else {}),
     })
     print(f"[results] {args.results_csv}'ye eklendi.")
 
