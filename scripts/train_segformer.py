@@ -29,8 +29,12 @@ from torch.utils.data import DataLoader
 from mtl.config import load_config
 from mtl.datasets.coco_multitask import CocoMultiTaskDataset
 from mtl.datasets.collate import collate_fn
+from mtl.utils.bench import measure_efficiency
 from mtl.utils.device import resolve_device
 from mtl.utils.results import append_result
+
+# Not: measure_efficiency `module(x)` çağırır; HF SegFormer'da model(x) = forward(pixel_values=x)
+# (pixel_values ilk positional) → SegFormer modeli doğrudan geçilebilir, sarmalayıcı gerekmez.
 
 
 @torch.no_grad()
@@ -62,8 +66,13 @@ def main() -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--model", default="nvidia/mit-b2", help="HF SegFormer encoder (nvidia/mit-b0..b5)")
     parser.add_argument("--results-csv", default="runs/results.csv")
-    parser.add_argument("--resume", default=None, help="epoch checkpoint'inden devam")
+    parser.add_argument("--resume", default=None, help="epoch checkpoint'inden devam (veya --eval-only ile eval)")
+    parser.add_argument("--eval-only", action="store_true",
+                        help="EĞİTME, sadece --resume checkpoint'ini val'de eval'le (kesilmiş koşu için)")
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--measure-only", action="store_true",
+                        help="EĞİTME/EVAL YOK — sadece verim (params/FPS/gecikme/bellek) ölç ve çık. "
+                             "Veri/checkpoint gerekmez (verim yalnız mimariye bağlı; saniyeler)")
     args = parser.parse_args()
 
     from transformers import SegformerForSemanticSegmentation
@@ -71,6 +80,29 @@ def main() -> None:
     cfg = load_config(args.config)
     device = resolve_device(cfg.train.device)
     tag = args.model.split("/")[-1]  # "mit-b2"
+
+    # --measure-only: sadece verim ölçümü — veri/eğitim/checkpoint yok (verim yalnız mimariye bağlı).
+    # measure_efficiency, bizim backbone "Verimlilik" tablosuyla AYNI metodoloji (batch=1, warmup+iter, sync).
+    if args.measure_only:
+        model = SegformerForSemanticSegmentation.from_pretrained(
+            args.model, num_labels=81, ignore_mismatched_sizes=True
+        ).to(device)
+        eff = measure_efficiency(model, device, img_size=cfg.data.img_size, batch=1)
+        print(f"\n=== REFERANS: SegFormer ({args.model}) — verim (TAM model, batch=1, {device.type}, img {cfg.data.img_size}) ===")
+        print(f"  params_M    : {eff['params_M']:.1f}")
+        print(f"  latency_ms  : {eff['latency_ms']:.2f}")
+        print(f"  fps         : {eff['fps']:.1f}")
+        if eff['peak_mem_MB'] == eff['peak_mem_MB']:  # NaN değilse (cuda)
+            print(f"  peak_mem_MB : {eff['peak_mem_MB']:.0f}")
+        print("  ⚠️ A100 'Verimlilik' tablosuyla kıyaslanamaz: TAM model (yalnız backbone değil) + farklı GPU.")
+        append_result(args.results_csv, {
+            "run_name": f"ref_segformer_{tag}_eff", "backbone": f"segformer_{tag}",
+            "trainable_layers": "ft", "checkpoint": "-", "split": "eff", "step": 0,
+            "params_M": round(eff["params_M"], 2), "latency_ms": round(eff["latency_ms"], 2),
+            "fps": round(eff["fps"], 1), "peak_mem_MB": round(eff["peak_mem_MB"], 0),
+        })
+        print(f"[results] {args.results_csv}'ye eklendi.")
+        return
 
     train_ds = CocoMultiTaskDataset(cfg.data.ann_file, cfg.data.img_dir, img_size=cfg.data.img_size,
                                     train=True, n_images=cfg.data.n_images)
@@ -88,6 +120,24 @@ def main() -> None:
     optim = torch.optim.AdamW(model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
     use_amp = (device.type == "cuda") and not args.no_amp
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+
+    # --eval-only: eğitmeden, verilen checkpoint'i val'de değerlendir (kesilmiş/plato yapmış koşu için)
+    if args.eval_only:
+        if not args.resume:
+            raise SystemExit("--eval-only için --resume <checkpoint.pt> gerekli.")
+        state = torch.load(args.resume, map_location=str(device))
+        model.load_state_dict(state["model"])
+        step = state.get("step", 0)
+        miou = compute_miou(model, val_loader, device, num_classes, use_amp)
+        print(f"\n=== REFERANS (eval-only): SegFormer ({args.model}) — bizim val (step {step}) ===")
+        print(f"  seg_mIoU : {miou:.4f}   (⚠️ trained-specialist referansı; kıyas değil)")
+        append_result(args.results_csv, {
+            "run_name": f"ref_segformer_{tag}", "backbone": f"segformer_{tag}",
+            "trainable_layers": "ft", "checkpoint": args.resume, "split": "val",
+            "step": step, "seg_mIoU": miou,
+        })
+        print(f"[results] {args.results_csv}'ye eklendi.")
+        return
 
     ckpt_dir = Path(cfg.train.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
