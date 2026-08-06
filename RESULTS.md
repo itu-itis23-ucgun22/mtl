@@ -113,7 +113,11 @@ feature'ı daha sağlam (seg/cls'de frozen'ın bile altında).
 **⚡ Referans verim (A100, aynı ölçüm = adil):**
 - **det-ft** (ResNet backbone+FPN): **26.8M / 92.6 FPS / 273 MB** (latency 10.80 ms) → bizim A100 Verimlilik
   tablosu **ResNet satırıyla birebir tutarlı** (91.1 FPS/26.8M) ✅ → A100'de kıyas adil.
-- **SegFormer-B2** (full model): *(bekliyor — `--eval-only`/`--measure-only` A100)*.
+- **SegFormer-B2** (FULL model, A100): **27.4M / 55.6 FPS / 919 MB** (latency 17.97 ms; seg 0.5109 nihai/epoch15).
+  ⚠️ full-model (encoder+decode head) → det-ft'nin backbone-only'siyle kapsam farklı. Gözlem: SegFormer 27.4M
+  **FULL segmenter** ≈ ResNet backbone (26.8M) boyutunda + makul hızlı (55.6 FPS) ama **tek görev + seg 0.51**;
+  DINOv2 (92M backbone, 45 FPS) **üç görevi tek backbone'la** yapıyor + seg'de daha iyi (0.60). → seg-only edge
+  dağıtımı için SegFormer-B2 verimli bir nokta; **çok-görevli** kısıtlı platform için paylaşılan DINOv2 üstün.
 - **Deployment maliyeti (somut):** 3 ayrı ResNet specialist = **3× 26.8M ≈ 80M** + 3 forward; 1 paylaşılan frozen
   backbone = **1× 26.8M** + 3 minik head ≈ 1 forward. → paylaşılan **~3× ucuz** (backbone = pahalı parça), üstelik
   doğrulukta da geçiyor. Motivasyon (kısıtlı platform) sayısal olarak da doğrulandı.
