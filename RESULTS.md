@@ -110,6 +110,14 @@ frozen DINOv2 hepsini eziyor. Motivasyon (kısıtlı platform) doğrulandı: **f
 maliyet hem doğruluk). Tekrarlayan mekanizma: 22.5k'da trainable ResNet backbone drift/overfit → frozen ImageNet
 feature'ı daha sağlam (seg/cls'de frozen'ın bile altında).
 
+**⚡ Referans verim (A100, aynı ölçüm = adil):**
+- **det-ft** (ResNet backbone+FPN): **26.8M / 92.6 FPS / 273 MB** (latency 10.80 ms) → bizim A100 Verimlilik
+  tablosu **ResNet satırıyla birebir tutarlı** (91.1 FPS/26.8M) ✅ → A100'de kıyas adil.
+- **SegFormer-B2** (full model): *(bekliyor — `--eval-only`/`--measure-only` A100)*.
+- **Deployment maliyeti (somut):** 3 ayrı ResNet specialist = **3× 26.8M ≈ 80M** + 3 forward; 1 paylaşılan frozen
+  backbone = **1× 26.8M** + 3 minik head ≈ 1 forward. → paylaşılan **~3× ucuz** (backbone = pahalı parça), üstelik
+  doğrulukta da geçiyor. Motivasyon (kısıtlı platform) sayısal olarak da doğrulandı.
+
 
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)
 
