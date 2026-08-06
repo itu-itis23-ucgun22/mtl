@@ -70,6 +70,7 @@ def main() -> None:
     parser.add_argument("--eval-only", action="store_true",
                         help="EĞİTME, sadece --resume checkpoint'ini val'de eval'le (kesilmiş koşu için)")
     parser.add_argument("--no-amp", action="store_true")
+    parser.add_argument("--no-fps", action="store_true", help="eval'de verim (params/FPS/bellek) ölçümünü atla")
     parser.add_argument("--measure-only", action="store_true",
                         help="EĞİTME/EVAL YOK — sadece verim (params/FPS/gecikme/bellek) ölç ve çık. "
                              "Veri/checkpoint gerekmez (verim yalnız mimariye bağlı; saniyeler)")
@@ -129,12 +130,23 @@ def main() -> None:
         model.load_state_dict(state["model"])
         step = state.get("step", 0)
         miou = compute_miou(model, val_loader, device, num_classes, use_amp)
+        eff = None if args.no_fps else measure_efficiency(model, device, img_size=cfg.data.img_size, batch=1)
         print(f"\n=== REFERANS (eval-only): SegFormer ({args.model}) — bizim val (step {step}) ===")
         print(f"  seg_mIoU : {miou:.4f}   (⚠️ trained-specialist referansı; kıyas değil)")
+        if eff:
+            print(f"  --- verim (TAM model, batch=1, {device.type}) ---")
+            print(f"  params_M    : {eff['params_M']:.1f}")
+            print(f"  latency_ms  : {eff['latency_ms']:.2f}")
+            print(f"  fps         : {eff['fps']:.1f}")
+            if eff['peak_mem_MB'] == eff['peak_mem_MB']:
+                print(f"  peak_mem_MB : {eff['peak_mem_MB']:.0f}")
+            print("  ⚠️ backbone 'Verimlilik' tablosuyla kıyaslanamaz: TAM model (encoder+decode head).")
         append_result(args.results_csv, {
             "run_name": f"ref_segformer_{tag}", "backbone": f"segformer_{tag}",
             "trainable_layers": "ft", "checkpoint": args.resume, "split": "val",
             "step": step, "seg_mIoU": miou,
+            **({"params_M": round(eff["params_M"], 2), "latency_ms": round(eff["latency_ms"], 2),
+                "fps": round(eff["fps"], 1), "peak_mem_MB": round(eff["peak_mem_MB"], 0)} if eff else {}),
         })
         print(f"[results] {args.results_csv}'ye eklendi.")
         return
