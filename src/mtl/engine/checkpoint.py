@@ -28,7 +28,13 @@ def load_checkpoint(model: nn.Module, optimizer: optim.Optimizer, path: str, map
     (eski checkpoint) "epoch" değerine düşer - o durumda adım takibi yaklaşık olur.
     """
     ckpt = torch.load(path, map_location=map_location)
-    model.load_state_dict(ckpt["model"])
+    state = ckpt["model"]
+    # Geriye-uyum: seg_neck refactor'undan (SemanticSegHead.fcn -> .decoder) ÖNCE eğitilmiş
+    # checkpoint'ler eski "seg_head.fcn.*" adını taşır. Yapı aynı (FCNHead), yalnız isim değişti →
+    # yeni koda uyacak şekilde yeniden adlandır. Yeni checkpoint'lerde bu anahtar yok → no-op.
+    if any(k.startswith("seg_head.fcn.") for k in state):
+        state = {k.replace("seg_head.fcn.", "seg_head.decoder."): v for k, v in state.items()}
+    model.load_state_dict(state)
     if optimizer is not None:
         optimizer.load_state_dict(ckpt["optimizer"])
     step = ckpt.get("step")
