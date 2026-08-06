@@ -1078,10 +1078,35 @@ olur; donuk tutmak (yalnız ASPP eğit) daha sağlam. → **frozen-foundation te
 trained referans, bizim frozen yaklaşımımızın **altında** çıktı. (⚠️ kısmen LR/optim olabilir; ama loss yakınsamış.)
 Detection ref'iyle aynı desen: trained ResNet ≈/< frozen; **frozen DINOv2 hepsinin üstünde.**
 
-### Bekleyen
-- **seg SegFormer-B2** fine-tune (trained MODERN/güçlü segmenter, ~2-4 sa) — bizim mIoU. Asıl "modern tavan"ı o
-  verecek (ResNet+ASPP zaten bizim mimarimiz, redundant). RESULTS'taki ikinci seg satırını doldurur.
-- **cls: atlandı** — frozen cls-only (D22: 0.81) zaten "izole cls" tavanını veriyor; trained ResNet cls marjinal.
+### Dördüncü sonuç — Segmentation: SegFormer (modern trained segmenter, bizim veri)
+`scripts/train_segformer.py --config train_ref_segformer` (HF SegFormer MiT-B2, 81-sınıf head, bizim 22.5k'da
+fine-tune, seg-only; mIoU bizim engine/evaluate ile parite). **seg_mIoU = 0.5109** (son aşama val).
+
+| model | seg_mIoU |
+|---|---|
+| frozen **DINOv2** multi-task (satır 9) | **0.6011** |
+| **SegFormer-B2 (bu ref)** | **0.5109** |
+| frozen ResNet+ASPP multi-task (satır 20) | 0.4606 |
+| trainable ResNet+ASPP seg-only | 0.3751 |
+| frozen ResNet+FCN multi-task (satır 8) | 0.3215 |
+
+**🎯🎯 Bulgu — modern trained segmenter bile frozen DINOv2'yi GEÇEMEDİ.** SegFormer (0.51) ResNet ref'lerinin
+üstünde (beklenen, güçlü) **ama frozen DINOv2 multi-task'ın (0.60) ALTINDA.** → **purpose-built + modern + bizim
+veride eğitilmiş bir segmenter bile, hiç eğitilmemiş (frozen) DINOv2'nin multi-task seg'ini geçemiyor.** Bu, tüm
+projenin **frozen-foundation tezinin en güçlü tek kanıtı**: bu veri ölçeğinde frozen foundation feature'ı, trained
+modern specialist'ten iyi. **Sıralama:** DINOv2 > SegFormer-B2 > ResNet+ASPP > trainable ResNet > ResNet+FCN.
+
+⚠️ **Boyut confound'u (dürüst):** SegFormer-**B2** encoder ~27M vs DINOv2 **ViT-B** ~86M (3×). Size-matched
+SegFormer-**B5** (~85M) farkı kapatabilir/tersine çevirebilir — test edilmedi. Ama iki nüans confound'u yumuşatıyor:
+(a) bu boyutta bile SegFormer DINOv2'yi geçemedi, (b) SegFormer-B2 (~ResNet boyutu) verim açısından **rekabetçi**
+→ accuracy↔size tatlı noktası. Yine de "SegFormer < DINOv2" iddiası **B2'ye özgü**, B5 dipnotu gerekli.
+
+### 🏁 Referans seti (büyük ölçüde) tamam
+Üç görevde referans: **det** (trained ResNet 0.19 · zero-shot Faster R-CNN 0.47 SOTA-tavanı) · **seg** (trained
+ResNet 0.375 · SegFormer-B2 0.51) · **cls** atlandı (frozen cls-only D22:0.81 zaten izole-tavan). **Ana çıkarım:**
+det ve seg'de **frozen DINOv2 multi-task, bizim-veride-trained specialist'leri geçiyor**; yalnız full-COCO SOTA
+(zero-shot Faster R-CNN) detection tavanı bizden çok üstte (farklı rejim: 118k veri). → frozen-foundation tezi,
+referanslarla da doğrulandı. (Opsiyonel gelecek: SegFormer-B5 size-match; cls trained ref.)
 
 ---
 

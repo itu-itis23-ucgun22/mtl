@@ -68,7 +68,7 @@ Her referans farklı **REJİM** → mutlaka etiketiyle oku. Metrik paritesi: hep
 | **det** | ResNet50+RetinaNet | trained, bizim 22.5k, tek-görev | **0.1932** | DINOv2 0.2300 · ResNet 0.1965 | trained ResNet ≈ frozen ResNet, **frozen DINOv2'nin ALTINDA** |
 | **det** | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | **0.4690** | DINOv2 0.2300 | SOTA **~2×** bizim; asıl gap **SMALL** (0.310 vs 0.036, ~9×) |
 | **seg** | ResNet50+ASPP | trained (backbone AÇIK), bizim 22.5k, tek-görev | **0.3751** | 0.6011 | step 48000/90000'de **kesildi** (loss platoda, yakınsamış). trainable ResNet **frozen ASPP'nin (satır 20: 0.46) ALTINDA** → fine-tune 22.5k'da seg'e yaramadı |
-| seg | SegFormer-B2 | trained, bizim 22.5k, tek-görev | *(bekliyor)* | 0.6011 | — |
+| **seg** | SegFormer-B2 | trained, bizim 22.5k, tek-görev | **0.5109** | 0.6011 | modern trained segmenter → ResNet ref'lerin ÜSTÜNDE ama **frozen DINOv2'nin ALTINDA** (⚠️ B2 27M < ViT-B 86M, boyut confound) |
 | cls | — | (atlandı: frozen cls-only=0.81 zaten var, D22) | — | 0.7800 | — |
 
 **🎯 Detection bulgusu (trained ResNet ref):** backbone açık + tek-görev trained ResNet detektör (0.1932,
@@ -93,6 +93,14 @@ backbone'u **çözmek, dondurmaktan kötü** (backbone drift/overfit; frozen Ima
 projenin **frozen-foundation tezini pekiştiriyor:** referans (tavan sanılan) bizim frozen yaklaşımımızın **altında**
 çıktı. (⚠️ kısmen LR/optimizasyon olabilir ama loss yakınsamış → gerçek etki.) Detection ref'iyle aynı melodi:
 trained ResNet ≈/< frozen, **frozen DINOv2 hepsinin üstünde.**
+
+**🎯🎯 Segmentation (SegFormer ref — modern trained segmenter):** SegFormer-B2 (bizim veride fine-tuned, seg-only)
+= **0.5109** → ResNet ref'lerinin üstünde (0.46 / 0.375) ama **frozen DINOv2 multi-task'ın (0.6011) ALTINDA.**
+Yani **purpose-built + modern + bizim veride eğitilmiş bir segmenter bile frozen DINOv2'yi geçemedi** — frozen-
+foundation tezinin en güçlü tek kanıtı. Seg sıralaması: **DINOv2 (0.60) > SegFormer-B2 (0.51) > ResNet+ASPP (0.46)
+> trainable ResNet (0.375) > ResNet+FCN (0.32).** ⚠️ **Boyut confound'u:** SegFormer-B2 encoder ~27M vs DINOv2
+ViT-B ~86M (3×) → size-matched SegFormer-B5 (~85M) farkı kapatabilir; ama bu boyutta bile SegFormer geçemedi +
+verim açısından (27M ≈ ResNet) rekabetçi (accuracy↔size tatlı noktası).
 
 
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)
