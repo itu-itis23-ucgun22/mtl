@@ -69,7 +69,7 @@ Her referans farklı **REJİM** → mutlaka etiketiyle oku. Metrik paritesi: hep
 | **det** | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | **0.4690** | DINOv2 0.2300 | SOTA **~2×** bizim; asıl gap **SMALL** (0.310 vs 0.036, ~9×) |
 | **seg** | ResNet50+ASPP | trained (backbone AÇIK), bizim 22.5k, tek-görev | **0.3751** | 0.6011 | step 48000/90000'de **kesildi** (loss platoda, yakınsamış). trainable ResNet **frozen ASPP'nin (satır 20: 0.46) ALTINDA** → fine-tune 22.5k'da seg'e yaramadı |
 | **seg** | SegFormer-B2 | trained, bizim 22.5k, tek-görev | **0.5109** | 0.6011 | modern trained segmenter → ResNet ref'lerin ÜSTÜNDE ama **frozen DINOv2'nin ALTINDA** (⚠️ B2 27M < ViT-B 86M, boyut confound) |
-| cls | — | (atlandı: frozen cls-only=0.81 zaten var, D22) | — | 0.7800 | — |
+| **cls** | ResNet50 classifier | trained (backbone AÇIK), bizim 22.5k, tek-görev | **0.6857 / 0.6767** | 0.7800 / 0.7239 | step 58000 (loss ~platoda). trained ResNet **frozen ResNet multi-task'ın (0.7084) ALTINDA** → fine-tune 22.5k'da cls'e de yaramadı |
 
 **🎯 Detection bulgusu (trained ResNet ref):** backbone açık + tek-görev trained ResNet detektör (0.1932,
 loss platoda→yakınsamış) **frozen ResNet multi-task'a ≈ eşit** (0.1965) ve **frozen DINOv2'nin altında**
@@ -101,6 +101,14 @@ foundation tezinin en güçlü tek kanıtı. Seg sıralaması: **DINOv2 (0.60) >
 > trainable ResNet (0.375) > ResNet+FCN (0.32).** ⚠️ **Boyut confound'u:** SegFormer-B2 encoder ~27M vs DINOv2
 ViT-B ~86M (3×) → size-matched SegFormer-B5 (~85M) farkı kapatabilir; ama bu boyutta bile SegFormer geçemedi +
 verim açısından (27M ≈ ResNet) rekabetçi (accuracy↔size tatlı noktası).
+
+**🎯🎯🎯 "3 ayrı trained ResNet specialist" üçlüsü tamam — DEPLOYMENT payoff:** det 0.1932 · seg 0.3751 ·
+cls 0.6857 (hepsi backbone açık + tek-görev, bizim 22.5k). **Üçünde de: trained ResNet specialist ≤ frozen
+ResNet multi-task (0.1965/0.4606/0.7084) << frozen DINOv2 multi-task (0.2300/0.6011/0.7800).** → **3 ayrı
+trained specialist (3× backbone maliyeti), 1 frozen paylaşılan backbone'u (1× maliyet) HİÇBİR görevde geçemiyor**;
+frozen DINOv2 hepsini eziyor. Motivasyon (kısıtlı platform) doğrulandı: **frozen-multitask kesin kazanan** (hem
+maliyet hem doğruluk). Tekrarlayan mekanizma: 22.5k'da trainable ResNet backbone drift/overfit → frozen ImageNet
+feature'ı daha sağlam (seg/cls'de frozen'ın bile altında).
 
 
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)

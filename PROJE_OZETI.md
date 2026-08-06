@@ -127,7 +127,7 @@ classification **interference-bound (headroom var)**. D16 (adaptif loss cls'i +3
 | det | Faster R-CNN | zero-shot, full-COCO (SOTA tavanı) | **0.4690** | 0.2300 |
 | seg | ResNet50+ASPP | trained (backbone açık), tek-görev | 0.3751 (step48k kesildi) | 0.6011 |
 | seg | **SegFormer-B2** | trained, bizim 22.5k, tek-görev | **0.5109** | 0.6011 |
-| cls | ResNet50 classifier | trained, bizim 22.5k, tek-görev | *(koşuluyor)* | 0.7800 |
+| cls | ResNet50 classifier | trained, bizim 22.5k, tek-görev | **0.6857 / 0.6767** | 0.7800 / 0.7239 |
 
 **🎯 Referans bulguları:**
 - **Trained ResNet det (0.19) ≈ frozen ResNet, frozen DINOv2'nin (0.23) altında.**
@@ -239,7 +239,7 @@ PSPNet (PPM) · YOLOP loss · DPT (neden proxy çöktü) · "baseline tek katman
 - **Rapor figürleri:** kalitatif viz (section 12) + öğrenme eğrileri (section 13) + **doğruluk↔FPS scatter** (motivasyon).
 - **Yazım / konsolidasyon** (RESULTS zaten %70'i).
 
-**Tier 2 — güçlendiren:** cls referansı (koşuluyor) · BEiT renorm re-run · per_task_identical (B).
+**Tier 2 — güçlendiren:** SegFormer verim ölçümü · BEiT renorm re-run · per_task_identical (B) · cls-ft/SegFormer nihai epoch.
 
 **Yayın için (ana venue):** merkezi iddiayı keskinleştir ("**donuk foundation, sınırlı-veri+kısıtlı-platformda
 trained specialist'leri geçer**") + multiple seeds/error bar + (opsiyonel) küçük method katkısı.
@@ -262,4 +262,5 @@ trained specialist'leri geçer**") + multiple seeds/error bar + (opsiyonel) kü�
 ---
 
 *Son güncelleme: 2026-08-06. Deney günlüğü: EXPERIMENTS.md (Deneme 1–23). Sonuç tabloları: RESULTS.md. Bu dosya
-tüm oturumların/kodun/MD'lerin sentezidir; referans kıyasları (cls) hâlâ koşuluyor.*
+tüm oturumların/kodun/MD'lerin sentezidir. Referans seti tamam (det/seg/cls trained + Faster R-CNN/SegFormer);
+bazı trained referanslar loss-platoda erken kesildi (nihai epoch opsiyonel).*

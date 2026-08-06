@@ -1101,12 +1101,27 @@ SegFormer-**B5** (~85M) farkı kapatabilir/tersine çevirebilir — test edilmed
 (a) bu boyutta bile SegFormer DINOv2'yi geçemedi, (b) SegFormer-B2 (~ResNet boyutu) verim açısından **rekabetçi**
 → accuracy↔size tatlı noktası. Yine de "SegFormer < DINOv2" iddiası **B2'ye özgü**, B5 dipnotu gerekli.
 
-### 🏁 Referans seti (büyük ölçüde) tamam
-Üç görevde referans: **det** (trained ResNet 0.19 · zero-shot Faster R-CNN 0.47 SOTA-tavanı) · **seg** (trained
-ResNet 0.375 · SegFormer-B2 0.51) · **cls** atlandı (frozen cls-only D22:0.81 zaten izole-tavan). **Ana çıkarım:**
-det ve seg'de **frozen DINOv2 multi-task, bizim-veride-trained specialist'leri geçiyor**; yalnız full-COCO SOTA
-(zero-shot Faster R-CNN) detection tavanı bizden çok üstte (farklı rejim: 118k veri). → frozen-foundation tezi,
-referanslarla da doğrulandı. (Opsiyonel gelecek: SegFormer-B5 size-match; cls trained ref.)
+### Beşinci sonuç — Classification: trained ResNet classifier (bizim veri)
+`train_colab_resnet_cls_ft.yaml`: ResNet50 backbone AÇIK + GAP+FC head + cls-only, 22.5k. step 58000 (~10.3/16
+epoch, loss ~platoda). **cls_mAP = 0.6857 / cls_F1 = 0.6767** (verim: 26.8M / 72.5 FPS / 273 MB).
+→ **frozen ResNet multi-task'ın (0.7084/0.6799) ALTINDA** ve frozen DINOv2'nin (0.7800/0.7239) çok altında.
+seg-ft ile aynı: trainable backbone 22.5k'da drift/overfit → frozen daha sağlam. (İlginç: D22'de frozen DINOv2
+cls-only İZOLE edilince +%4 kazanmıştı; burada trainable ResNet cls-only frozen'ın ALTINDA → izolasyon-kazancını
+trainable-backbone-zararı bastırıyor.)
+
+### 🏁 Referans seti TAMAM — deployment payoff
+| görev | trained ResNet specialist | frozen ResNet multi-task | frozen DINOv2 multi-task | zero-shot SOTA |
+|---|---|---|---|---|
+| det | 0.1932 | 0.1965 | **0.2300** | Faster R-CNN 0.4690 |
+| seg | 0.3751 | 0.4606 | **0.6011** | (SegFormer trained 0.5109) |
+| cls | 0.6857 | 0.7084 | **0.7800** | — |
+
+**🎯🎯🎯 Ana çıkarım:** **3 ayrı trained ResNet specialist (3× backbone maliyeti), 1 frozen paylaşılan backbone'u
+(1× maliyet) HİÇBİR görevde geçemiyor** (üçünde de ≤ frozen ResNet multi-task); frozen DINOv2 hepsini eziyor.
+Modern trained SegFormer bile frozen DINOv2 seg'ini geçemedi (0.51<0.60). Yalnız full-COCO SOTA (zero-shot Faster
+R-CNN 0.47, 118k veri, farklı rejim) detection tavanı bizden üstte. → **Motivasyon (kısıtlı platform) doğrulandı:
+frozen-foundation multi-task, hem maliyet hem doğrulukta kazanan.** frozen-foundation tezi referanslarla da mühürlendi.
+(Opsiyonel gelecek: SegFormer-B5 size-match; cls-ft nihai epoch.)
 
 ---
 
