@@ -122,6 +122,16 @@ feature'ı daha sağlam (seg/cls'de frozen'ın bile altında).
   backbone = **1× 26.8M** + 3 minik head ≈ 1 forward. → paylaşılan **~3× ucuz** (backbone = pahalı parça), üstelik
   doğrulukta da geçiyor. Motivasyon (kısıtlı platform) sayısal olarak da doğrulandı.
 
+**⚡ Faz 2/3 modelleri (A100 verim) — doğruluk ~BEDAVA eksen** *(metrikler kayıtla eşleşti, doğrulama ✓)*:
+- **ResNet+ASPP** (satır 20): **87.0 FPS** / 26.8M / 283 MB · **ResNet+ASPP+PAN** (satır 22): **89.7 FPS** / 26.8M /
+  301 MB → ikisi de ≈ düz ResNet backbone (ASPP/PAN **head'de**, backbone'a ~sıfır ek) → **+%43 seg / +%6.4 det,
+  ~sıfır backbone maliyetiyle.**
+- **MAE+LoRA** (satır 16): **59.5 FPS** / 91.8M / 476 MB ≈ donuk MAE (61 FPS) → **LoRA adaptasyonu (det/seg +%80)
+  da ~bedava** (+0.4M adaptör).
+- **Genel ders:** paylaşılan omurga sabitken doğruluk-artıran ekler (bağlam-neck ASPP, PAN, LoRA) **maliyet-nötr**
+  — Faz 1'deki *"pretraining bedava eksen"*in Faz 2/3 karşılığı. Sunum için güçlü: **accuracy↔cost grafiğinde bu
+  modeller ~dikey çizgide** (aynı FPS, artan doğruluk).
+
 
 ## ⚡ Verimlilik — FPS / gecikme / bellek (A100-SXM4-40GB, batch=1)
 
