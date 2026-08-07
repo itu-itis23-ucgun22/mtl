@@ -90,6 +90,8 @@ def cls_text(cls_pred, cat_names, topk=5):
 
 
 def build_model(cfg, checkpoint, dataset, device):
+    # eval.py ile AYNI tam parametre seti → LoRA / ASPP / PAN / task-native / multilayer / adaptive
+    # checkpoint'lerinin anahtarları uyuşur (aksi halde key-mismatch). Faz 1 modelleri için de zararsız.
     model = MultiTaskModel(
         backbone_name=cfg.model.backbone_name,
         pretrained=False,  # ★ ağırlıklar checkpoint'ten -> HF'ten indirme YOK
@@ -97,6 +99,11 @@ def build_model(cfg, checkpoint, dataset, device):
         det_num_classes=dataset.num_classes,
         seg_num_classes=dataset.num_classes + 1,
         cls_num_labels=dataset.num_classes,
+        lora=cfg.model.lora, lora_rank=cfg.model.lora_rank, lora_alpha=cfg.model.lora_alpha,
+        lora_dropout=cfg.model.lora_dropout, lora_targets=cfg.model.lora_targets,
+        lora_blocks=cfg.model.lora_blocks, adaptive_loss=cfg.loss.adaptive,
+        seg_neck=cfg.model.seg_neck, neck_mode=cfg.model.neck_mode, det_neck=cfg.model.det_neck,
+        multilayer_taps=cfg.model.multilayer_taps, det_box_loss=cfg.model.det_box_loss,
     ).to(device)
     load_checkpoint(model, optimizer=None, path=checkpoint, map_location=str(device))
     model.eval()
