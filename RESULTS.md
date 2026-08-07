@@ -118,9 +118,21 @@ feature'ı daha sağlam (seg/cls'de frozen'ın bile altında).
   **FULL segmenter** ≈ ResNet backbone (26.8M) boyutunda + makul hızlı (55.6 FPS) ama **tek görev + seg 0.51**;
   DINOv2 (92M backbone, 45 FPS) **üç görevi tek backbone'la** yapıyor + seg'de daha iyi (0.60). → seg-only edge
   dağıtımı için SegFormer-B2 verimli bir nokta; **çok-görevli** kısıtlı platform için paylaşılan DINOv2 üstün.
-- **Deployment maliyeti (somut):** 3 ayrı ResNet specialist = **3× 26.8M ≈ 80M** + 3 forward; 1 paylaşılan frozen
-  backbone = **1× 26.8M** + 3 minik head ≈ 1 forward. → paylaşılan **~3× ucuz** (backbone = pahalı parça), üstelik
-  doğrulukta da geçiyor. Motivasyon (kısıtlı platform) sayısal olarak da doğrulandı.
+- **Deployment maliyeti (ÖLÇÜLÜ — `scripts/measure_bundle.py`, A100 batch=1):** 3 görevi **3 AYRI ResNet uzmanı**
+  ile aynı anda yapmak vs **1 paylaşılan** multi-task modelle yapmak:
+
+  | | params | gecikme | FPS | bellek |
+  |---|---|---|---|---|
+  | **PAYLAŞILAN** (1 model, 3 görev) | 33.4M | 23.5 ms | **42.5** | **387 MB** |
+  | **BUNDLE** (3 ayrı model, Σ) | 102.4M | 68.8 ms | **14.5** | **1228 MB** |
+  | **oran** | **3.06×** | **2.93×** | ⅓ | **3.17×** |
+
+  → 3 ayrı model her boyutta **~3× pahalı** (14.5 FPS gerçek-zaman zor, 1.2 GB). **Paylaşılan model tek bir uzman
+  kadar (33.4M/23.5ms) ama 3 görevi birden yapıyor.** Sebep: maliyet omurgada; paylaşılanda omurga **1 kez**
+  çalışıp 3 head'i besliyor, ayrı rejimde **3 kez** çalışıyor. **backbone-only kırılım kanıtı:** her uzman omurgası
+  26.8M/~90 FPS → 3× = replikasyonun saf maliyeti; head'ler iki rejimde de ortak → **fark tamamen omurga
+  replikasyonundan** (tek değişken izole). Motivasyon (kısıtlı platform) **ölçülerek** doğrulandı — üstelik
+  paylaşılan doğrulukta da geçiyor.
 
 **⚡ Faz 2/3 modelleri (A100 verim) — doğruluk ~BEDAVA eksen** *(metrikler kayıtla eşleşti, doğrulama ✓)*:
 - **ResNet+ASPP** (satır 20): **87.0 FPS** / 26.8M / 283 MB · **ResNet+ASPP+PAN** (satır 22): **89.7 FPS** / 26.8M /
