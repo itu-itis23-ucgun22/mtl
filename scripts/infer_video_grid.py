@@ -46,7 +46,7 @@ def preprocess(frame_rgb: np.ndarray, size: int, device: torch.device) -> torch.
     return t.unsqueeze(0).to(device)
 
 
-def render_tile(frame_bgr, out, size, cat_names, colors, thresh, seg_alpha, no_seg, name, ms):
+def render_tile(frame_bgr, out, size, cat_names, colors, thresh, seg_alpha, no_seg, name, ms, metrics_str):
     """frame_bgr (kopya) üstüne bu modelin det+seg+banner'ını çizer, aynı kareyi döndürür."""
     H, W = frame_bgr.shape[:2]
     sx, sy = W / size, H / size
@@ -75,11 +75,15 @@ def render_tile(frame_bgr, out, size, cat_names, colors, thresh, seg_alpha, no_s
                     (x1, max(y1 - 5, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, c, 2, cv2.LINE_AA)
         nd += 1
 
-    # üst banner: model adı + FPS + kutu sayısı
-    bar = frame_bgr[0:34, 0:W].copy()
-    frame_bgr[0:34, 0:W] = cv2.addWeighted(bar, 0.35, np.zeros_like(bar), 0.65, 0)
+    # üst banner: satır1 = model adı + canlı FPS + kutu; satır2 = kayıtlı metrikler (verilmişse)
+    bh = 52 if metrics_str else 34
+    bar = frame_bgr[0:bh, 0:W].copy()
+    frame_bgr[0:bh, 0:W] = cv2.addWeighted(bar, 0.30, np.zeros_like(bar), 0.70, 0)
     cv2.putText(frame_bgr, f"{name}  |  {1000.0/ms:4.1f} FPS  |  det {nd}",
-                (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+                (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA)
+    if metrics_str:
+        cv2.putText(frame_bgr, metrics_str, (8, 44), cv2.FONT_HERSHEY_SIMPLEX, 0.52,
+                    (120, 255, 120), 2, cv2.LINE_AA)
     return frame_bgr
 
 
@@ -95,10 +99,20 @@ def main() -> None:
     p.add_argument("--no-seg", action="store_true")
     p.add_argument("--max-frames", type=int, default=None)
     p.add_argument("--seg-alpha", type=float, default=0.45)
+    p.add_argument("--labels", nargs="+", default=None,
+                   help="hücre başlıkları (config ile AYNI sırada). Aynı backbone'lu modeller (LoRA/neck "
+                        "varyantları) için ŞART — yoksa hepsi backbone adıyla görünüp karışır.")
+    p.add_argument("--metrics", nargs="+", default=None,
+                   help="hücre 2. satır metin (config sırasıyla): kayıtlı metrikler, ör. "
+                        "'mAP.23 mIoU.60 cls.78'. Tırnak içinde ver (boşluk içerir).")
     args = p.parse_args()
 
     if len(args.config) != len(args.checkpoint):
         raise SystemExit("--config ve --checkpoint aynı sayıda olmalı")
+    if args.labels and len(args.labels) != len(args.config):
+        raise SystemExit("--labels sayısı --config ile eşleşmeli")
+    if args.metrics and len(args.metrics) != len(args.config):
+        raise SystemExit("--metrics sayısı --config ile eşleşmeli")
 
     device = resolve_device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -108,19 +122,28 @@ def main() -> None:
     cat_names = [c["name"] for c in ds.coco.loadCats(ds.cat_ids)]
     colors = class_colors(ds.num_classes)
 
+    labels = args.labels or [None] * len(args.config)
+    metrics = args.metrics or [None] * len(args.config)
     models = []
-    for cfg_path, ckpt in zip(args.config, args.checkpoint):
+    for cfg_path, ckpt, lbl, met in zip(args.config, args.checkpoint, labels, metrics):
         cfg = load_config(cfg_path)
+        # eval.py ile AYNI tam parametre seti → LoRA/ASPP/PAN/task-native/multilayer checkpoint'leri uyuşur
         m = MultiTaskModel(
             backbone_name=cfg.model.backbone_name, pretrained=False,
             trainable_backbone_layers=cfg.model.trainable_backbone_layers,
             det_num_classes=ds.num_classes, seg_num_classes=ds.num_classes + 1,
             cls_num_labels=ds.num_classes,
+            lora=cfg.model.lora, lora_rank=cfg.model.lora_rank, lora_alpha=cfg.model.lora_alpha,
+            lora_dropout=cfg.model.lora_dropout, lora_targets=cfg.model.lora_targets,
+            lora_blocks=cfg.model.lora_blocks, adaptive_loss=cfg.loss.adaptive,
+            seg_neck=cfg.model.seg_neck, neck_mode=cfg.model.neck_mode, det_neck=cfg.model.det_neck,
+            multilayer_taps=cfg.model.multilayer_taps, det_box_loss=cfg.model.det_box_loss,
         ).to(device)
         load_checkpoint(m, optimizer=None, path=ckpt, map_location=str(device))
         m.eval()
-        models.append((cfg.model.backbone_name, cfg.data.img_size, m, deque(maxlen=20)))
-        print(f"yüklendi: {cfg.model.backbone_name} <- {ckpt}")
+        name = lbl or cfg.model.backbone_name  # ayırt edici etiket (yoksa backbone adı)
+        models.append((name, met, cfg.data.img_size, m, deque(maxlen=20)))
+        print(f"yüklendi: {name} <- {ckpt}")
 
     cap = cv2.VideoCapture(args.video)
     if not cap.isOpened():
@@ -147,7 +170,7 @@ def main() -> None:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         canvas = np.zeros((gh, gw, 3), dtype=np.uint8)
 
-        for k, (name, size, model, hist) in enumerate(models):
+        for k, (name, met, size, model, hist) in enumerate(models):
             x = preprocess(frame_rgb, size, device)
             if is_cuda:
                 torch.cuda.synchronize()
@@ -160,7 +183,7 @@ def main() -> None:
             ms = sum(hist) / len(hist)
 
             tile = render_tile(frame_bgr.copy(), out, size, cat_names, colors,
-                               args.score_thresh, args.seg_alpha, args.no_seg, name, ms)
+                               args.score_thresh, args.seg_alpha, args.no_seg, name, ms, met)
             tile = cv2.resize(tile, (tw, th))
             r, c = divmod(k, cols)
             canvas[r * th:(r + 1) * th, c * tw:(c + 1) * tw] = tile
