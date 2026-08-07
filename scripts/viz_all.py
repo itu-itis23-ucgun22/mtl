@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import math
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,19 @@ GROUPS = [
 PARTIAL = ["dinov2_detonly", "dinov2_segonly", "dinov2_clsonly",
            "resnet_det_ft", "resnet_seg_ft", "resnet_cls_ft"]
 
+# Figürde satır başlığı = okunur, AYIRT EDİCİ etiket (backbone adı değil — aynı backbone'lular karışmasın)
+NAMES = {
+    "resnet_frozen": "ResNet(FCN)", "dino": "DINOv1", "dinov2": "DINOv2", "clip": "CLIP",
+    "mae": "MAE", "sam": "SAM", "ijepa": "I-JEPA", "deit": "DeiT",
+    "mae_lora": "MAE+LoRA", "dinov2_lora": "DINOv2+LoRA",
+    "dinov2_adaptive": "DINOv2+adaptif", "dinov2_taskneck_native": "DINOv2 task-native",
+    "dinov2_multilayer": "DINOv2 multilayer", "dinov2_ciou": "DINOv2(≈baseline)",
+    "resnet_segaspp": "ResNet+ASPP", "resnet_segaspp_detpan": "ResNet+ASPP+PAN",
+    "dinov2_detonly": "DINOv2 det-only", "dinov2_segonly": "DINOv2 seg-only",
+    "dinov2_clsonly": "DINOv2 cls-only",
+    "resnet_det_ft": "ResNet det-ft", "resnet_seg_ft": "ResNet seg-ft", "resnet_cls_ft": "ResNet cls-ft",
+}
+
 CONFIG_DIR = Path("configs")
 
 
@@ -105,10 +119,25 @@ def resolve(key: str, ckpt_dir: Path):
     return str(cfg_path), str(ckpt), step
 
 
-def run_visualize(resolved, out_dir: Path, num_images: int, score_thresh: float) -> None:
+def cache_local(src: str, cache_dir: Path | None) -> str:
+    """Checkpoint'i yerel diske SIRALI kopyala, yerel yolu döndür. Drive (FUSE) rastgele-seek
+    kopukluklarına (Errno 107) karşı: torch.load yerel SSD'den okur. cache_dir None → kopyalama yok."""
+    if cache_dir is None:
+        return src
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    dst = cache_dir / Path(src).name
+    if not dst.exists() or dst.stat().st_size != Path(src).stat().st_size:
+        print(f"  [cache] {Path(src).name} → yerel")
+        shutil.copy2(src, dst)
+    return str(dst)
+
+
+def run_visualize(resolved, out_dir: Path, num_images: int, score_thresh: float,
+                  cache_dir: Path | None, labels) -> None:
     configs = [r[0] for r in resolved]
-    ckpts = [r[1] for r in resolved]
+    ckpts = [cache_local(r[1], cache_dir) for r in resolved]
     cmd = [sys.executable, "scripts/visualize.py", "--config", *configs, "--checkpoint", *ckpts,
+           "--labels", *labels,  # ayırt edici satır başlıkları (aynı backbone'lular karışmasın)
            "--num-images", str(num_images), "--score-thresh", str(score_thresh), "--out-dir", str(out_dir)]
     subprocess.run(cmd, check=True)
 
@@ -119,10 +148,15 @@ def main() -> None:
     p.add_argument("--out-root", default="viz")
     p.add_argument("--num-images", type=int, default=6)
     p.add_argument("--score-thresh", type=float, default=0.3)
+    p.add_argument("--cache-dir", default="none",
+                   help="Drive kopması (Errno 107) yaşarsan bir yol ver (ör. /content/_ckpt_cache): "
+                        "checkpoint'ler render öncesi oraya SIRALI kopyalanır, torch.load yerelden okur. "
+                        "Varsayılan 'none' = doğrudan --checkpoint-dir'den oku (Drive stabilse gereksiz).")
     args = p.parse_args()
 
     ckpt_dir = Path(args.checkpoint_dir)
     out_root = Path(args.out_root)
+    cache_dir = None if args.cache_dir.lower() == "none" else Path(args.cache_dir)
 
     # Her model için son checkpoint'i çöz + rapor bas
     print(f"\n{'='*78}\n SEÇİLEN CHECKPOINT'LER (run_name -> en yüksek global adım)\n{'='*78}")
@@ -138,19 +172,21 @@ def main() -> None:
 
     # Kıyas grupları
     for folder, keys in GROUPS:
-        present = [chosen[k] for k in keys if k in chosen]
-        if not present:
+        present_keys = [k for k in keys if k in chosen]
+        if not present_keys:
             print(f"[grup {folder}] atlandı (checkpoint yok)")
             continue
-        names = ", ".join(k for k in keys if k in chosen)
-        print(f"[grup {folder}] modeller: {names}")
-        run_visualize(present, out_root / folder, args.num_images, args.score_thresh)
+        present = [chosen[k] for k in present_keys]
+        labels = [NAMES.get(k, k) for k in present_keys]
+        print(f"[grup {folder}] modeller: {', '.join(labels)}")
+        run_visualize(present, out_root / folder, args.num_images, args.score_thresh, cache_dir, labels)
 
     # Tek-görev / referans (tek başına — diğer sütunlar eğitilmemiş, çöp)
     for key in PARTIAL:
         if key in chosen:
             print(f"[partial {key}] tek-başına render (yalnız kendi görevi geçerli)")
-            run_visualize([chosen[key]], out_root / "7_partial" / key, args.num_images, args.score_thresh)
+            run_visualize([chosen[key]], out_root / "7_partial" / key,
+                           args.num_images, args.score_thresh, cache_dir, [NAMES.get(key, key)])
 
     print(f"\nBitti → {out_root} (1_hero .. 6_dinov2_loss, 7_partial/*).")
 

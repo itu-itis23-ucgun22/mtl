@@ -122,25 +122,33 @@ def main() -> None:
     p.add_argument("--ann-file", default=None, help="split JSON (yoksa config'in val'i). TEST için test_subset.json")
     p.add_argument("--img-dir", default=None, help="--ann-file ile eşleşen görüntü klasörü")
     p.add_argument("--out-dir", default="viz")
+    p.add_argument("--labels", nargs="+", default=None,
+                   help="satır başlıkları (config ile AYNI sırada). Verilmezse backbone adı kullanılır — "
+                        "AMA aynı backbone'lu modeller (ör. ResNet+ASPP vs +PAN) o zaman ayırt edilemez, "
+                        "bu yüzden çok-model kıyasında ayırt edici etiket VER: ör. 'ResNet+ASPP' 'ResNet+ASPP+PAN'")
     args = p.parse_args()
 
     if len(args.config) != len(args.checkpoint):
         raise SystemExit("--config ve --checkpoint aynı sayıda olmalı (backbone başına bir çift)")
+    if args.labels and len(args.labels) != len(args.config):
+        raise SystemExit("--labels sayısı --config ile eşleşmeli")
 
     device = resolve_device("cuda" if torch.cuda.is_available() else "cpu")
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Her backbone için: config, val dataset (kendi img_size'ında), model.
+    labels = args.labels or [None] * len(args.config)
     entries = []
-    for cfg_path, ckpt in zip(args.config, args.checkpoint):
+    for cfg_path, ckpt, lbl in zip(args.config, args.checkpoint, labels):
         cfg = load_config(cfg_path)
         ann = args.ann_file or cfg.data.val_ann_file  # test için --ann-file ver
         img_dir = args.img_dir or cfg.data.val_img_dir
         ds = CocoMultiTaskDataset(ann, img_dir, img_size=cfg.data.img_size, train=False)
         model = build_model(cfg, ckpt, ds, device)
-        entries.append((cfg.model.backbone_name, ds, model))
-        print(f"yüklendi: {cfg.model.backbone_name}  <- {ckpt}")
+        name = lbl or cfg.model.backbone_name  # ayırt edici etiket (yoksa backbone adı)
+        entries.append((name, ds, model))
+        print(f"yüklendi: {name}  <- {ckpt}")
 
     # Kategori isimleri (ilk dataset'ten; hepsi aynı val ann -> aynı sınıflar).
     ref_ds = entries[0][1]
