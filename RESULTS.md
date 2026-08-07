@@ -134,6 +134,21 @@ feature'ı daha sağlam (seg/cls'de frozen'ın bile altında).
   replikasyonundan** (tek değişken izole). Motivasyon (kısıtlı platform) **ölçülerek** doğrulandı — üstelik
   paylaşılan doğrulukta da geçiyor.
 
+- **Heterojen bundle ("her göreve en iyi model" bile) vs paylaşılan DINOv2** (A100 batch=1): Faster R-CNN (det) +
+  SegFormer-B2 (seg) + ResNet-cls, aynı anda:
+
+  | | params | gecikme | FPS | bellek |
+  |---|---|---|---|---|
+  | **PAYLAŞILAN** (DINOv2, 3 görev @518) | 98.8M | 32.5 ms | **30.8** | **699 MB** |
+  | **BUNDLE** (F-RCNN + SegFormer + ResNet-cls, Σ) | 102.6M | 60.5 ms | **16.5** | **1507 MB** |
+  | **oran** | 1.04× | **1.86×** | ½ | **2.16×** |
+
+  → params ~eşit (paylaşılan referans bu sefer büyük DINOv2) ama bundle 3 ayrı forward → **1.86× gecikme + 2.16×
+  bellek.** Doğruluk **karışık ama tez lehine:** bundle yalnız **det'te** kazanıyor (F-RCNN 0.47) — o da **full-COCO/
+  zero-shot, farklı rejim**; **aynı rejimde** ölçülen seg+cls'te paylaşılan DINOv2 üstün (seg 0.60>0.51, cls
+  0.78>0.68). **"SOTA-per-task" toplasan bile ~2× pahalı + aynı-rejim görevlerde tek paylaşılan hâlâ kazanıyor.**
+  (Homojen ResNet bundle 3×, heterojen ~2×: fark, heterojende paylaşılanın da ağır DINOv2 olmasından.)
+
 **⚡ Faz 2/3 modelleri (A100 verim) — doğruluk ~BEDAVA eksen** *(metrikler kayıtla eşleşti, doğrulama ✓)*:
 - **ResNet+ASPP** (satır 20): **87.0 FPS** / 26.8M / 283 MB · **ResNet+ASPP+PAN** (satır 22): **89.7 FPS** / 26.8M /
   301 MB → ikisi de ≈ düz ResNet backbone (ASPP/PAN **head'de**, backbone'a ~sıfır ek) → **+%43 seg / +%6.4 det,
