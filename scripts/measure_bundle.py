@@ -94,7 +94,10 @@ def build_model(spec: str, device: torch.device):
 def measure(spec: str, device: torch.device, img_size_override: int | None):
     """Bir modelin full-model (+ varsa backbone-only) batch=1 verimini ölç."""
     model, backbone, native, label = build_model(spec, device)
-    img_size = img_size_override or native
+    # mtl backbone girdi boyutu MİMARİYE bağlı (patch14 DINOv2 → 518; 512 bölünmez) → override'ı
+    # YOKSAY, config'in native boyutunu kullan. Esnek dış modeller (segformer/torchvision) override alır.
+    kind = spec.partition(":")[0]
+    img_size = native if (kind == "mtl" or not img_size_override) else img_size_override
     full = measure_efficiency(model, device, img_size=img_size, batch=1)
     back = measure_efficiency(backbone, device, img_size=img_size, batch=1) if backbone is not None else None
     del model, backbone
