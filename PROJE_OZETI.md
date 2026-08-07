@@ -163,6 +163,9 @@ classification **interference-bound (headroom var)**. D16 (adaptif loss cls'i +3
    gecikme 2.93× · bellek 3.17×**. Paylaşılan ≈ tek uzman kadar ama 3 görevi birden yapıyor (omurga 1 kez vs
    3 kez çalışıyor; backbone-only kırılım tek değişkeni izole ediyor). 3 ayrı model det+cls'de **daha kötü VE
    ~3× pahalı** → motivasyon **iki eksende de** ölçülerek mühürlendi. (Verim mimariye bağlı → checkpoint gerekmez.)
+   **Heterojen bundle** (Faster R-CNN + SegFormer + ResNet-cls "SOTA-per-task") vs paylaşılan DINOv2: **1.86×
+   gecikme / 2.16× bellek**; bundle yalnız det'te kazanıyor (F-RCNN full-COCO, farklı rejim), aynı-rejim seg+cls'te
+   paylaşılan üstün → "en iyi uzmanları toplasan bile" paylaşılan tek omurga daha ucuz + rakip.
 
 ---
 
@@ -195,6 +198,20 @@ Deneme 17 (task-native), 18 (ResNet+ASPP +%43), 19 (multilayer çöktü), 20 (Re
 PSPNet (PPM) · YOLOP loss · DPT (neden proxy çöktü) · "baseline tek katman kullanıyor (5 seviye ≠ 5 katman)" ·
 "ASPP bir neck'tir, head değil" · ViTDet (head değil, reçete; SFP'sini zaten kullanıyoruz) · MoE detection'ı
 çözmez (interference darboğaz değil) · referans rejim-tutarlılığı · deployment-motivasyonu (küçük model şart).
+
+### Sonraki oturum: deployment verimi + görselleştirme (A100)
+- **`measure_bundle.py` (YENİ):** "3 ayrı model vs 1 paylaşılan" birleşik verim; homojen (3× ResNet) **3.06×/2.93×/3.17×**
+  ve heterojen (F-RCNN+SegFormer+ResNet-cls) **1.86×/2.16×** ölçüldü. Verim mimariye bağlı → checkpoint yüklenmez.
+- **A100 verim ölçümü (mevcut modeller):** ResNet+ASPP (87 FPS), ResNet+ASPP+PAN (89.7), MAE+LoRA (59.5),
+  SegFormer-B2 (55.6, full-model), det-ft ResNet (92.6). RESULTS "Verimlilik/Referans verim" bloklarına işlendi.
+- **Görselleştirme araçları:** `visualize.py`'a **`--labels`** (aynı-backbone modeller ayırt edilir); yeni
+  **`viz_all.py`** (tüm modelleri tek komutta, checkpoint'i run_name'den EN YÜKSEK global adımla otomatik seçer —
+  yarıda kesilenler dahil; eksikleri atlar; opt-in yerel-cache Drive FUSE kopmasına karşı); `infer_video_grid.py`'a
+  **`--labels` + `--metrics`** (video hücrelerinde canlı FPS yanında kayıtlı metrik).
+- **Checkpoint geriye-uyum:** `load_checkpoint` eski `seg_head.fcn.*` → yeni `seg_head.decoder.*` remap eder
+  (seg_neck refactor öncesi checkpoint'ler, ör. MAE+LoRA).
+- **Not (veri bütünlüğü):** Faz 1 donuk backbone checkpoint'leri Drive klasöründe yok (metrikler kayıtlı); görsel
+  gruplar mevcut Faz 2/3 + referans modelleriyle üretildi (`dinov2_ciou` ≈ baseline vekili).
 
 ---
 
@@ -230,9 +247,11 @@ PSPNet (PPM) · YOLOP loss · DPT (neden proxy çöktü) · "baseline tek katman
 - **Loss:** `joint_loss.py` (sabit ağırlık + Kendall `UncertaintyWeighter`).
 - **Config alanları (Faz 3):** `seg_neck` (fcn/aspp/lraspp), `neck_mode`, `det_neck` (fpn/pan), `multilayer_taps`,
   `det_box_loss` (l1/ciou), `adaptive`, LoRA (`lora*`).
-- **Scriptler:** train, train_cached, eval, precompute_features, benchmark_latency, visualize, plot_metric_curves,
-  infer_video(_grid), compare_results, prepare_coco_subset, download_subset_images, **eval_pretrained_detector**
-  (yeni), **train_segformer** (yeni), **measure_bundle** (yeni — "3 ayrı model vs 1 paylaşılan" birleşik verim).
+- **Scriptler:** train, train_cached, eval, precompute_features, benchmark_latency, visualize (**+`--labels`**),
+  plot_metric_curves, infer_video, infer_video_grid (**+`--labels`/`--metrics`**), compare_results,
+  prepare_coco_subset, download_subset_images, **eval_pretrained_detector**, **train_segformer**,
+  **measure_bundle** ("3 ayrı model vs 1 paylaşılan" birleşik verim), **viz_all** (tüm modeller tek komutta,
+  checkpoint'i otomatik son-adımdan seçer + opt-in yerel-cache).
 - **Configler:** her backbone + Faz 3 varyantları (adaptive, taskneck, taskneck_native, segaspp, seglraspp,
   multilayer, ciou, detonly/segonly/clsonly, resnet_*_ft, ref_segformer).
 
@@ -242,7 +261,8 @@ PSPNet (PPM) · YOLOP loss · DPT (neden proxy çöktü) · "baseline tek katman
 
 **Tier 1 — tezi tamamlayan (ucuz, kritik):**
 - **Held-out TEST seti** final sayıları (Faz 2'de seçim yaptık → val'e overfit değil kanıtı). Saf eval, ~bedava. (`instances_test_subset.json` hazır.)
-- **Rapor figürleri:** kalitatif viz (section 12) + öğrenme eğrileri (section 13) + **doğruluk↔FPS scatter** (motivasyon).
+- **Rapor figürleri:** kalitatif viz ✅ (`viz_all.py` — gruplu görseller + demo videoları üretildi) + öğrenme eğrileri (section 13) + **doğruluk↔FPS scatter** (motivasyon; verim verileri hazır).
+- **Sunum:** Faz 1 ara sunumda verildi; Faz 2→3→referans→deployment akışı hazır (16 slayt taslağı).
 - **Yazım / konsolidasyon** (RESULTS zaten %70'i).
 
 **Tier 2 — güçlendiren:** SegFormer verim ölçümü · BEiT renorm re-run · per_task_identical (B) · cls-ft/SegFormer nihai epoch.
