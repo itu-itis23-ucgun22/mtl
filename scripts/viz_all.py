@@ -25,46 +25,48 @@ from pathlib import Path
 
 from mtl.config import load_config
 
-# key -> config (checkpoint OTOMATİK bulunur; run_name config'ten okunur)
+# key -> (config, GERÇEK run_name). run_name Drive'daki dosya adlarından (kesin) → find_latest onu arar.
+# Checkpoint OTOMATİK: run_name altındaki epoch/step'lerden en yüksek global adım. Config = mimari (build_model).
 REGISTRY = {
-    # FAZ 1 — donuk backbone sweep
-    "resnet_frozen": "train_colab_resnet_frozen.yaml",
-    "dino":          "train_colab_dino.yaml",
-    "dinov2":        "train_colab_dinov2.yaml",
-    "clip":          "train_colab_clip.yaml",
-    "mae":           "train_colab_mae.yaml",
-    "sam":           "train_colab_sam.yaml",
-    "ijepa":         "train_colab_ijepa.yaml",
-    "deit":          "train_colab_deit.yaml",
+    # FAZ 1 — donuk backbone sweep (⚠️ bu Drive klasöründe YOK; başka klasör verilirse çalışır)
+    "resnet_frozen": ("train_colab_resnet_frozen.yaml", "colab_resnet_frozen"),
+    "dino":          ("train_colab_dino.yaml",          "colab_dino_cached"),
+    "dinov2":        ("train_colab_dinov2.yaml",        "colab_dinov2"),
+    "clip":          ("train_colab_clip.yaml",          "colab_clip_cached"),
+    "mae":           ("train_colab_mae.yaml",           "colab_mae_cached"),
+    "sam":           ("train_colab_sam.yaml",           "colab_sam_cached"),
+    "ijepa":         ("train_colab_ijepa.yaml",         "colab_ijepa_cached"),
+    "deit":          ("train_colab_deit.yaml",          "colab_deit_cached"),
     # FAZ 2 — LoRA
-    "mae_lora":      "train_colab_mae_lora.yaml",
-    "dinov2_lora":   "train_colab_dinov2_lora.yaml",
-    # FAZ 3 — ablasyonlar
-    "dinov2_adaptive":        "train_colab_dinov2_adaptive.yaml",
-    "dinov2_taskneck_native": "train_colab_dinov2_taskneck_native.yaml",
-    "dinov2_multilayer":      "train_colab_dinov2_multilayer.yaml",
-    "dinov2_segaspp":         "train_colab_dinov2_segaspp.yaml",
-    "dinov2_ciou":            "train_colab_dinov2_ciou.yaml",
-    "resnet_segaspp":         "train_colab_resnet_frozen_segaspp.yaml",
-    "resnet_segaspp_detpan":  "train_colab_resnet_frozen_segaspp_detpan.yaml",
+    "mae_lora":      ("train_colab_mae_lora.yaml",      "colab_mae_lora"),
+    "dinov2_lora":   ("train_colab_dinov2_lora.yaml",   "colab_dinov2_lora"),
+    # FAZ 3 — ablasyonlar (gerçek run_name'ler: cached var/yok tutarsız)
+    "dinov2_adaptive":        ("train_colab_dinov2_adaptive.yaml",        "colab_dinov2_adaptive_cached"),
+    "dinov2_taskneck_native": ("train_colab_dinov2_taskneck_native.yaml", "colab_dinov2_taskneck_native_cached"),
+    "dinov2_multilayer":      ("train_colab_dinov2_multilayer.yaml",      "colab_dinov2_multilayer"),
+    "dinov2_ciou":            ("train_colab_dinov2_ciou.yaml",            "colab_dinov2_ciou_cached"),
+    "resnet_segaspp":         ("train_colab_resnet_frozen_segaspp.yaml",        "colab_resnet_frozen_segaspp"),
+    "resnet_segaspp_detpan":  ("train_colab_resnet_frozen_segaspp_detpan.yaml", "colab_resnet_frozen_segaspp_detpan"),
     # FAZ 3 — tek-görev (kısmi: yalnız kendi görevi geçerli)
-    "dinov2_detonly": "train_colab_dinov2_detonly.yaml",
-    "dinov2_segonly": "train_colab_dinov2_segonly.yaml",
-    "dinov2_clsonly": "train_colab_dinov2_clsonly.yaml",
+    "dinov2_detonly": ("train_colab_dinov2_detonly.yaml", "colab_dinov2_detonly_cached"),
+    "dinov2_segonly": ("train_colab_dinov2_segonly.yaml", "colab_dinov2_segonly_cached"),
+    "dinov2_clsonly": ("train_colab_dinov2_clsonly.yaml", "colab_dinov2_clsonly_cached"),
     # Referanslar (kısmi: backbone açık + tek görev)
-    "resnet_det_ft": "train_colab_resnet_det_ft.yaml",
-    "resnet_seg_ft": "train_colab_resnet_seg_ft.yaml",
-    "resnet_cls_ft": "train_colab_resnet_cls_ft.yaml",
+    "resnet_det_ft": ("train_colab_resnet_det_ft.yaml", "colab_resnet_det_ft"),
+    "resnet_seg_ft": ("train_colab_resnet_seg_ft.yaml", "colab_resnet_seg_ft"),
+    "resnet_cls_ft": ("train_colab_resnet_cls_ft.yaml", "colab_resnet_cls_ft"),
 }
 
-# Yan-yana KIYAS grupları (çoklu-görev)
+# Yan-yana KIYAS grupları. Baseline (colab_dinov2) bu klasörde yok → dinov2_ciou (≈baseline: det/seg/cls
+# baseline'a ~eşit) DINOv2 referans satırı olarak kullanılır. Faz 1 grupları başka klasörde otomatik çalışır.
 GROUPS = [
+    # -- Faz 1 baseline'ları varsa (başka klasör) --
     ("1_hero",           ["dinov2", "resnet_frozen", "sam", "mae"]),
     ("2_backbones_rest", ["dino", "clip", "deit", "ijepa"]),
-    ("3_adaptation",     ["mae", "mae_lora", "dinov2", "dinov2_lora"]),
-    ("4_resnet_necks",   ["resnet_frozen", "resnet_segaspp", "resnet_segaspp_detpan"]),
-    ("5_dinov2_necks",   ["dinov2", "dinov2_taskneck_native", "dinov2_multilayer", "dinov2_segaspp"]),
-    ("6_dinov2_loss",    ["dinov2", "dinov2_adaptive", "dinov2_ciou"]),
+    # -- bu klasörde mevcut olanlar --
+    ("3_dinov2_variants", ["dinov2_ciou", "dinov2_taskneck_native", "dinov2_multilayer", "dinov2_adaptive"]),
+    ("4_lora_adaptation", ["dinov2_ciou", "dinov2_lora", "mae_lora"]),
+    ("5_resnet_necks",    ["resnet_segaspp", "resnet_segaspp_detpan"]),
 ]
 # Tek başına render (kısmi çıktı — yalnız kendi görevi geçerli)
 PARTIAL = ["dinov2_detonly", "dinov2_segonly", "dinov2_clsonly",
@@ -93,10 +95,11 @@ def find_latest(ckpt_dir: Path, run_name: str, spe: int):
 
 def resolve(key: str, ckpt_dir: Path):
     """key -> (config_path, checkpoint_path, adım) | None (checkpoint yoksa)."""
-    cfg_path = CONFIG_DIR / REGISTRY[key]
+    cfg_name, run_name = REGISTRY[key]
+    cfg_path = CONFIG_DIR / cfg_name
     cfg = load_config(str(cfg_path))
     spe = math.ceil((cfg.data.n_images or 22500) / cfg.train.batch_size) or 5625
-    ckpt, step = find_latest(ckpt_dir, cfg.train.run_name, spe)
+    ckpt, step = find_latest(ckpt_dir, run_name, spe)  # GERÇEK run_name (Drive'dan), config'inki değil
     if ckpt is None:
         return None
     return str(cfg_path), str(ckpt), step
