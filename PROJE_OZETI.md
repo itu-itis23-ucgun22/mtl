@@ -17,7 +17,8 @@ COCO subset'te.
 - **Tez:** *Pretraining sinyali (supervised / SSL / dil / seg-native / MIM), az-etiketli çok-görevli
   dense tahminde hangi downstream görevde iyi olacağını **öngörür mü?***
 - **Motivasyon:** kısıtlı platform (uçak/edge) → **3 ayrı küçük model mi, yoksa 1 paylaşılan backbone +
-  3 head mi?** Maliyet-farkındalıklı karşılaştırma (3× backbone vs 1× backbone).
+  3 head mi?** Maliyet-farkındalıklı karşılaştırma — **ölçüldü: 3 ayrı model ~3× pahalı** (params 3.06× /
+  gecikme 2.93× / bellek 3.17×, `measure_bundle.py`; bkz. §3.7).
 - **Protokol (kanonik):** donuk backbone · 16 epoch · batch 4 · img 512 (patch14'te 518) · seed 42 ·
   sabit loss (det_cls 1 / det_box 1 / seg 1 / cls 0.5) · her deney bundan **tek şey** değiştirir.
 
@@ -157,6 +158,11 @@ classification **interference-bound (headroom var)**. D16 (adaptif loss cls'i +3
 6. **Frozen foundation > trained specialist (sınırlı veride):** trained ResNet det/seg ve **modern SegFormer**
    bile frozen DINOv2 multi-task'ı geçemedi. + verimlilik: 1 paylaşılan backbone < 3 ayrı specialist (3× maliyet).
    → **kısıtlı platform için frozen-multitask kazanıyor** (motivasyon doğrulandı).
+7. **Deployment maliyeti ÖLÇÜLDÜ (`measure_bundle.py`, A100):** 3 ayrı ResNet uzmanını aynı anda koşmak =
+   **102M / 14.5 FPS / 1.2 GB**; 1 paylaşılan multi-task = **33M / 42.5 FPS / 387 MB** → **params 3.06× ·
+   gecikme 2.93× · bellek 3.17×**. Paylaşılan ≈ tek uzman kadar ama 3 görevi birden yapıyor (omurga 1 kez vs
+   3 kez çalışıyor; backbone-only kırılım tek değişkeni izole ediyor). 3 ayrı model det+cls'de **daha kötü VE
+   ~3× pahalı** → motivasyon **iki eksende de** ölçülerek mühürlendi. (Verim mimariye bağlı → checkpoint gerekmez.)
 
 ---
 
@@ -226,7 +232,7 @@ PSPNet (PPM) · YOLOP loss · DPT (neden proxy çöktü) · "baseline tek katman
   `det_box_loss` (l1/ciou), `adaptive`, LoRA (`lora*`).
 - **Scriptler:** train, train_cached, eval, precompute_features, benchmark_latency, visualize, plot_metric_curves,
   infer_video(_grid), compare_results, prepare_coco_subset, download_subset_images, **eval_pretrained_detector**
-  (yeni), **train_segformer** (yeni).
+  (yeni), **train_segformer** (yeni), **measure_bundle** (yeni — "3 ayrı model vs 1 paylaşılan" birleşik verim).
 - **Configler:** her backbone + Faz 3 varyantları (adaptive, taskneck, taskneck_native, segaspp, seglraspp,
   multilayer, ciou, detonly/segonly/clsonly, resnet_*_ft, ref_segformer).
 
@@ -261,6 +267,7 @@ trained specialist'leri geçer**") + multiple seeds/error bar + (opsiyonel) kü�
 
 ---
 
-*Son güncelleme: 2026-08-06. Deney günlüğü: EXPERIMENTS.md (Deneme 1–23). Sonuç tabloları: RESULTS.md. Bu dosya
+*Son güncelleme: 2026-08-07. Deney günlüğü: EXPERIMENTS.md (Deneme 1–23). Sonuç tabloları: RESULTS.md. Bu dosya
 tüm oturumların/kodun/MD'lerin sentezidir. Referans seti tamam (det/seg/cls trained + Faster R-CNN/SegFormer);
-bazı trained referanslar loss-platoda erken kesildi (nihai epoch opsiyonel).*
+bazı trained referanslar loss-platoda erken kesildi (nihai epoch opsiyonel). Deployment maliyeti ölçüldü
+(`measure_bundle.py`: 3 ayrı model ~3× — §3.7).*

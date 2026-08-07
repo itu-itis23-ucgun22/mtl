@@ -1123,6 +1123,24 @@ R-CNN 0.47, 118k veri, farklı rejim) detection tavanı bizden üstte. → **Mot
 frozen-foundation multi-task, hem maliyet hem doğrulukta kazanan.** frozen-foundation tezi referanslarla da mühürlendi.
 (Opsiyonel gelecek: SegFormer-B5 size-match; cls-ft nihai epoch.)
 
+### 💰 Deployment maliyeti ÖLÇÜLDÜ — "3× backbone maliyeti" artık tahmin değil (`scripts/measure_bundle.py`)
+Yukarıdaki "3× maliyet" ifadesi bir tahmindi; **birleşik verimi ölçtük** (A100, batch=1, girdi 512). "aynı anda 3
+görev" = bir görüntü için 3 çıktının HEPSİ gerekir → tek hızlandırıcıda sıralı koşum → gecikme/param/bellek TOPLANIR.
+
+| | params | gecikme | FPS | bellek |
+|---|---|---|---|---|
+| **PAYLAŞILAN** (1 model, 3 görev) | 33.4M | 23.5 ms | **42.5** | **387 MB** |
+| **BUNDLE** (3 ayrı ResNet uzmanı, Σ) | 102.4M | 68.8 ms | **14.5** | **1228 MB** |
+| **oran** | **3.06×** | **2.93×** | ⅓ | **3.17×** |
+
+- **Paylaşılan model ≈ tek bir uzman kadar (33.4M/23.5ms) ama 3 görevi birden yapıyor.** Maliyet omurgada;
+  paylaşılanda omurga **1 kez** çalışıp 3 head'i besliyor, ayrı rejimde **3 kez** çalışıyor.
+- **backbone-only kırılım (kanıt):** her uzman omurgası 26.8M / ~90 FPS → 3× = replikasyonun **saf** maliyeti;
+  head'ler iki rejimde de ortak (3 head her durumda var) → **fark tamamen omurga replikasyonundan** (tek değişken izole).
+- ⚠️ Verim yalnız MİMARİYE bağlı (ağırlığa değil) → checkpoint yüklenmez (key-mismatch riski yok); doğruluk metrikleri
+  zaten ölçülü (yukarıdaki tablo). **Sonuç: 3 ayrı model det+cls'de daha KÖTÜ VE ~3× pahalı** — iki eksende de kaybeder.
+  Metodoloji A100 "Verimlilik" tablosuyla aynı (measure_efficiency). Ham: RESULTS "Deployment maliyeti (ÖLÇÜLÜ)".
+
 ---
 
 ## Deneme 15 — 2026-07-25 — 🎯🎯🎯 FAZ 2 AÇILDI: MAE + LoRA → "donukken kötü, çözüldüğünde harika" DOĞRULANDI
